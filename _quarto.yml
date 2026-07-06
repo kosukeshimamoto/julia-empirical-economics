@@ -1,0 +1,12 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "Empirical Economics with Julia"
+
+format:
+  html:
+    theme: cosmo
+    page-layout: full
+    css: styles.css

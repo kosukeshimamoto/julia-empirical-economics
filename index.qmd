@@ -1,0 +1,38 @@
+---
+title: "Julia for Empirical Economics"
+subtitle: "Kosuke Shimamoto, Duke University"
+---
+
+::: {.course-hero}
+::: {.logo-row}
+::: {.logo-tile .duke-tile}
+![](assets/img/duke-wordmark-white.svg){fig-alt="Duke University wordmark"}
+:::
+
+::: {.logo-tile .julia-tile}
+![](assets/img/julia-logo.svg){fig-alt="Julia programming language logo"}
+:::
+:::
+
+This module offers the opportunity to learn Julia programming and practical skills for economics research, especially computationally intensive work such as structural estimation.
+:::
+
+
+- Time
+  - July 20 - August 6, 2026
+  - Mon, Tue, and Thu, 12:30pm - 2:55pm
+- Location: Social Sciences 119
+
+## Lecture Schedule
+
+{{< include _schedule.qmd >}}
+
+## Assignments
+
+- HW1: Jul 26, 23:59
+- HW2: Aug 2, 23:59
+- HW3: Aug 9, 23:59
+
+## Final Project
+
+- TBA 

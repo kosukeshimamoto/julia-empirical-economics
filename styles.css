@@ -1,0 +1,133 @@
+html {
+  --julia-blue: #4063d8;
+  --julia-purple: #9558b2;
+  --julia-green: #389826;
+  --julia-red: #cb3c33;
+  --duke-blue: #012169;
+  --page-text: #202428;
+  --muted-text: #4f5863;
+  --rule: #e2e6eb;
+}
+
+body {
+  font-family: Helvetica, Arial, sans-serif;
+  color: var(--page-text);
+}
+
+main.content {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 1.5rem 4rem;
+  position: relative;
+}
+
+.quarto-title-block {
+  border-bottom: 3px solid transparent;
+  border-image: linear-gradient(
+      90deg,
+      var(--julia-blue),
+      var(--julia-purple),
+      var(--julia-green),
+      var(--julia-red)
+    )
+    1;
+  margin-bottom: 2rem;
+  padding-top: clamp(1.75rem, 5vh, 3rem);
+  padding-right: 14.5rem;
+  padding-bottom: 1.5rem;
+}
+
+.quarto-title-block .title {
+  line-height: 1.15;
+}
+
+.quarto-title-block .subtitle {
+  color: var(--muted-text);
+  line-height: 1.5;
+  margin-top: 0.75rem;
+}
+
+.course-hero {
+  margin-bottom: 1.75rem;
+}
+
+.course-hero p {
+  color: var(--muted-text);
+  font-size: 1.08rem;
+  line-height: 1.6;
+  max-width: 680px;
+}
+
+.logo-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0;
+  position: absolute;
+  right: 1.5rem;
+  top: clamp(1.75rem, 5vh, 3rem);
+}
+
+.logo-tile {
+  align-items: center;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  display: flex;
+  height: 44px;
+  justify-content: center;
+  padding: 0.55rem 0.75rem;
+}
+
+.logo-tile p {
+  line-height: 0;
+  margin: 0;
+}
+
+.logo-tile img {
+  display: block;
+  max-height: 26px;
+  object-fit: contain;
+  width: auto;
+}
+
+.duke-tile {
+  background: var(--duke-blue);
+  border-color: var(--duke-blue);
+  min-width: 104px;
+}
+
+.julia-tile {
+  background: #fff;
+  min-width: 96px;
+}
+
+.julia-tile img {
+  max-height: 34px;
+}
+
+a {
+  color: var(--julia-blue);
+}
+
+a:hover {
+  color: var(--julia-purple);
+}
+
+h2 {
+  border-bottom: 1px solid var(--rule);
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.35rem;
+}
+
+@media (max-width: 760px) {
+  .quarto-title-block {
+    padding-right: 0;
+  }
+
+  .logo-row {
+    margin-bottom: 1rem;
+    position: static;
+  }
+}
