@@ -1,0 +1,30 @@
+[
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "Julia for Empirical Economics",
+    "section": "",
+    "text": "This module offers the opportunity to learn Julia programming and practical skills for economics research, especially computationally intensive work such as structural estimation."
+  },
+  {
+    "objectID": "index.html#lecture-schedule",
+    "href": "index.html#lecture-schedule",
+    "title": "Julia for Empirical Economics",
+    "section": "Lecture Schedule",
+    "text": "Lecture Schedule\n\nDay 1 (Mon, Jul 20)\n\nCourse introduction (15 min)\nJulia basics (75 min)\n\nDay 2 (Tue, Jul 21)\n\nHigh performance tips (30 min)\nCoding with AI (60 min)\n\nDay 3 (Thu, Jul 23)\n\nGit (30 min)\nProject management (30 min)\n\nDay 4 (Mon, Jul 27)\n\nData cleaning (45 min)\nReduced-form analysis (45 min)\n\nDay 5 (Tue, Jul 28)\n\nComputational techniques 1 (60 min)\n\nDay 6 (Thu, Jul 30)\n\nComputational techniques 2 (60 min)\nDemo 1: BLP (30 min)\n\nDay 7 (Mon, Aug 3)\n\nNumerical methods in economics 1 (60 min)\nDemo 2: DDC (30 min)\n\nDay 8 (Tue, Aug 4)\n\nNumerical methods in economics 2 (60 min)\nDemo 3: TBA (30 min)\n\nDay 9 (Thu, Aug 6)\n\nComputer cluster (45 min)\nDemo 4: final project (45 min)"
+  },
+  {
+    "objectID": "index.html#assignments",
+    "href": "index.html#assignments",
+    "title": "Julia for Empirical Economics",
+    "section": "Assignments",
+    "text": "Assignments\n\nHW1: Jul 26, 23:59\nHW2: Aug 2, 23:59\nHW3: Aug 9, 23:59"
+  },
+  {
+    "objectID": "index.html#final-project",
+    "href": "index.html#final-project",
+    "title": "Julia for Empirical Economics",
+    "section": "Final Project",
+    "text": "Final Project\n\nTBA"
+  }
+]
