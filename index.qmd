@@ -22,6 +22,7 @@ This module offers the opportunity to learn Julia programming and practical skil
   - July 20 - August 6, 2026
   - Mon, Tue, and Thu, 12:30pm - 2:55pm
 - Location: Social Sciences 119
+- [Syllabus](syllabus.qmd)
 
 ## Lecture Schedule
 

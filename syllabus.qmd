@@ -1,0 +1,75 @@
+---
+title: "Julia for Empirical Economics"
+subtitle: |
+  July 20 - August 6, 2026<br>
+  Mon, Tue, and Thu, 12:30pm - 2:55pm, Social Sciences 119  
+author:
+  - name: "Kosuke Shimamoto"
+    affiliation: "Duke University"
+published-title: "Updated"
+date: "July 6, 2026"
+---
+
+Hi!
+Thank you for your interest in this class!
+I am very excited to offer this new module, because I could not find, at least online, a class designed around the core idea that LLMs can be used extensively to conduct structural estimation in Julia.
+I hope this module will be useful for your own research.
+I look forward to meeting you in class. 
+
+# Overview
+
+This module offers the opportunity to learn Julia programming and practical skills for economics research, especially computationally intensive work such as structural estimation.
+Julia is a modern programming language built for scientific computing, which is easy to learn and runs very fast compared to other languages. Julia is attractive for structural work, and its use in economics research has been growing.
+In addition to learning how to write Julia code, the module covers the kinds of practical techniques that economists often need but rarely learn in a formal class. 
+The module culminates in a hands-on Monte Carlo simulation for a structural estimation model.
+This module is mainly designed for students specializing in applied microeconomics, and the goal is to make the material directly useful for field courses, RA work, and your own research projects.
+
+# Logistics
+
+## Instructor
+
+**Instructor:** Kosuke Shimamoto, kosuke.shimamoto@duke.edu  
+**Office Hours:** By appointment
+
+## Course Principle
+
+- This module is designed to help students independently develop and implement their own empirical economics projects entirely in Julia. 
+- This module is based on the idea that the most effective way to learn a programming language is to implement things yourself, even if you use extensive support from LLMs.
+- The lectures aim to give students a high-level understanding of how to use Julia and related computational techniques.
+  - I will move relatively quickly to introduce the main ideas across many topics.  
+  - I will not cover every detail of the programming language in lecture.
+  - This is because you can use LLMs to study many implementation details on your own.
+- To complement the lectures, this module assigns many hands-on exercises.
+- This module strongly encourages the use of LLMs. But of course, you remain responsible for their outputs.
+
+## Class Style
+
+- Given the course principles, each class consists of a lecture and in-class activities. 
+- The lecture portion will take about 90 minutes, and the remaining 55 minutes will be for in-class activities. You can ask the instructor any questions during the latter half of the class. 
+- If you have finished the in-class activity for the day, you can work on the assignments, the final project, or your own work. The goal is to let you use class time productively. 
+
+## Grading and Assignments
+
+Your course grade will depend on three components:
+
+1. **In-class assignments (30%):** There will be one in-class assignment for each class. You need to submit it within 24 hours after the class ends. The grade is on a binary scale and is evaluated by effort. If you write at least one line of code, you will receive full credit. You receive full credit for this component if you correctly submit 7 of the 9 assignments, so you may miss 2 assignments.
+2. **Three coding homework assignments (40%):** You will be assigned weekly assignments during this class. The grades are evaluated by correctness. Each student must submit their own answer. All assignments are equally weighted.
+3. **Final project (30%):** You will be asked to complete a Monte Carlo simulation as the final project. The final project should be based on 1) your own work, 2) a paper you like, or 3) papers I suggest.
+More details are documented in a separate file.
+
+- Due
+  - HW1: Jul 26, 23:59
+  - HW2: Aug 2, 23:59
+  - HW3: Aug 9, 23:59
+  - Final Project: Aug 23, 23:59
+- Requirements
+  - All code must be written in Julia. You may call other languages from Julia if necessary.
+  - You must submit your code and its outputs.
+  - You can submit outputs in any format, such as PDF, HTML, or Word, except for the final project. The final project should be submitted as a PDF typeset in LaTeX because this is the format commonly expected for our research. 
+  - I recommend submitting homework as HTML files compiled from Quarto, because Quarto integrates well with Julia and is easy to write in.
+  - Before I introduce Git and GitHub, you will submit assignments via Canvas. After we learn GitHub, you must submit them via GitHub.
+
+
+# Lecture Schedule
+
+{{< include _schedule.qmd >}}
