@@ -6,6 +6,8 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
+<meta name="author" content="Kosuke Shimamoto">
+<meta name="dcterms.date" content="2026-07-06">
 
 <title>Julia for Empirical Economics – Empirical Economics with Julia</title>
 <style>
@@ -85,14 +87,33 @@ ul.task-list li input[type="checkbox"] {
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
 <h1 class="title">Julia for Empirical Economics</h1>
-<p class="subtitle lead">Kosuke Shimamoto, Duke University</p>
+<p class="subtitle lead"></p><p>July 20 - August 6, 2026<br> Mon, Tue, and Thu, 12:30pm - 2:55pm, Social Sciences 119</p><p></p>
 </div>
 
 
+<div class="quarto-title-meta-author column-page">
+  <div class="quarto-title-meta-heading">Author</div>
+  <div class="quarto-title-meta-heading">Affiliation</div>
+  
+    <div class="quarto-title-meta-contents">
+    <p class="author">Kosuke Shimamoto </p>
+  </div>
+  <div class="quarto-title-meta-contents">
+        <p class="affiliation">
+            Duke University
+          </p>
+      </div>
+  </div>
 
 <div class="quarto-title-meta column-page">
 
-    
+      
+    <div>
+    <div class="quarto-title-meta-heading">Updated</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">July 6, 2026</p>
+    </div>
+  </div>
   
     
   </div>
@@ -102,28 +123,71 @@ ul.task-list li input[type="checkbox"] {
 </header>
 
 
-<div class="course-hero">
-<div class="logo-row">
-<div class="logo-tile duke-tile">
-<p><img src="assets/img/duke-wordmark-white.svg" class="img-fluid" alt="Duke University wordmark"></p>
-</div>
-<div class="logo-tile julia-tile">
-<p><img src="assets/img/julia-logo.svg" class="img-fluid" alt="Julia programming language logo"></p>
-</div>
-</div>
-<p>This module offers the opportunity to learn Julia programming and practical skills for economics research, especially computationally intensive work such as structural estimation.</p>
-</div>
+<p>Hi! Thank you for your interest in this class! I am very excited to offer this new module, because I could not find, at least online, a class designed around the core idea that LLMs can be used extensively to conduct structural estimation in Julia. I hope this module will be useful for your own research. I look forward to meeting you in class.</p>
+<section id="overview" class="level1">
+<h1>Overview</h1>
+<p>This module offers the opportunity to learn Julia programming and practical skills for economics research, especially computationally intensive work such as structural estimation. Julia is a modern programming language built for scientific computing, which is easy to learn and runs very fast compared to other languages. Julia is attractive for structural work, and its use in economics research has been growing. In addition to learning how to write Julia code, the module covers the kinds of practical techniques that economists often need but rarely learn in a formal class. The module culminates in a hands-on Monte Carlo simulation for a structural estimation model. This module is mainly designed for students specializing in applied microeconomics, and the goal is to make the material directly useful for field courses, RA work, and your own research projects.</p>
+</section>
+<section id="logistics" class="level1">
+<h1>Logistics</h1>
+<section id="instructor" class="level2">
+<h2 class="anchored" data-anchor-id="instructor">Instructor</h2>
+<p><strong>Instructor:</strong> Kosuke Shimamoto, kosuke.shimamoto@duke.edu<br>
+<strong>Office Hours:</strong> By appointment</p>
+</section>
+<section id="course-principle" class="level2">
+<h2 class="anchored" data-anchor-id="course-principle">Course Principle</h2>
 <ul>
-<li>Time
+<li>This module is designed to help students independently develop and implement their own empirical economics projects entirely in Julia.</li>
+<li>This module is based on the idea that the most effective way to learn a programming language is to implement things yourself, even if you use extensive support from LLMs.</li>
+<li>The lectures aim to give students a high-level understanding of how to use Julia and related computational techniques.
 <ul>
-<li>July 20 - August 6, 2026</li>
-<li>Mon, Tue, and Thu, 12:30pm - 2:55pm</li>
+<li>I will move relatively quickly to introduce the main ideas across many topics.<br>
+</li>
+<li>I will not cover every detail of the programming language in lecture.</li>
+<li>This is because you can use LLMs to study many implementation details on your own.</li>
 </ul></li>
-<li>Location: Social Sciences 119</li>
-<li><a href="./syllabus.html">Syllabus</a></li>
+<li>To complement the lectures, this module assigns many hands-on exercises.</li>
+<li>This module strongly encourages the use of LLMs. But of course, you remain responsible for their outputs.</li>
 </ul>
-<section id="lecture-schedule" class="level2">
-<h2 class="anchored" data-anchor-id="lecture-schedule">Lecture Schedule</h2>
+</section>
+<section id="class-style" class="level2">
+<h2 class="anchored" data-anchor-id="class-style">Class Style</h2>
+<ul>
+<li>Given the course principles, each class consists of a lecture and in-class activities.</li>
+<li>The lecture portion will take about 90 minutes, and the remaining 55 minutes will be for in-class activities. You can ask the instructor any questions during the latter half of the class.</li>
+<li>If you have finished the in-class activity for the day, you can work on the assignments, the final project, or your own work. The goal is to let you use class time productively.</li>
+</ul>
+</section>
+<section id="grading-and-assignments" class="level2">
+<h2 class="anchored" data-anchor-id="grading-and-assignments">Grading and Assignments</h2>
+<p>Your course grade will depend on three components:</p>
+<ol type="1">
+<li><strong>In-class assignments (30%):</strong> There will be one in-class assignment for each class. You need to submit it within 24 hours after the class ends. The grade is on a binary scale and is evaluated by effort. If you write at least one line of code, you will receive full credit. You receive full credit for this component if you correctly submit 7 of the 9 assignments, so you may miss 2 assignments.</li>
+<li><strong>Three coding homework assignments (40%):</strong> You will be assigned weekly assignments during this class. The grades are evaluated by correctness. Each student must submit their own answer. All assignments are equally weighted.</li>
+<li><strong>Final project (30%):</strong> You will be asked to complete a Monte Carlo simulation as the final project. The final project should be based on 1) your own work, 2) a paper you like, or 3) papers I suggest. More details are documented in a separate file.</li>
+</ol>
+<ul>
+<li>Due
+<ul>
+<li>HW1: Jul 26, 23:59</li>
+<li>HW2: Aug 2, 23:59</li>
+<li>HW3: Aug 9, 23:59</li>
+<li>Final Project: Aug 23, 23:59</li>
+</ul></li>
+<li>Requirements
+<ul>
+<li>All code must be written in Julia. You may call other languages from Julia if necessary.</li>
+<li>You must submit your code and its outputs.</li>
+<li>You can submit outputs in any format, such as PDF, HTML, or Word, except for the final project. The final project should be submitted as a PDF typeset in LaTeX because this is the format commonly expected for our research.</li>
+<li>I recommend submitting homework as HTML files compiled from Quarto, because Quarto integrates well with Julia and is easy to write in.</li>
+<li>Before I introduce Git and GitHub, you will submit assignments via Canvas. After we learn GitHub, you must submit them via GitHub.</li>
+</ul></li>
+</ul>
+</section>
+</section>
+<section id="lecture-schedule" class="level1">
+<h1>Lecture Schedule</h1>
 <ul>
 <li>Day 1 (Mon, Jul 20)
 <ul>
@@ -169,20 +233,6 @@ ul.task-list li input[type="checkbox"] {
 <li>Computer cluster (45 min)</li>
 <li>Demo 4: final project (45 min)</li>
 </ul></li>
-</ul>
-</section>
-<section id="assignments" class="level2">
-<h2 class="anchored" data-anchor-id="assignments">Assignments</h2>
-<ul>
-<li>HW1: Jul 26, 23:59</li>
-<li>HW2: Aug 2, 23:59</li>
-<li>HW3: Aug 9, 23:59</li>
-</ul>
-</section>
-<section id="final-project" class="level2">
-<h2 class="anchored" data-anchor-id="final-project">Final Project</h2>
-<ul>
-<li>TBA</li>
 </ul>
 
 

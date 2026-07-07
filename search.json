@@ -1,5 +1,40 @@
 [
   {
+    "objectID": "syllabus.html",
+    "href": "syllabus.html",
+    "title": "Julia for Empirical Economics",
+    "section": "",
+    "text": "Hi! Thank you for your interest in this class! I am very excited to offer this new module, because I could not find, at least online, a class designed around the core idea that LLMs can be used extensively to conduct structural estimation in Julia. I hope this module will be useful for your own research. I look forward to meeting you in class."
+  },
+  {
+    "objectID": "syllabus.html#instructor",
+    "href": "syllabus.html#instructor",
+    "title": "Julia for Empirical Economics",
+    "section": "Instructor",
+    "text": "Instructor\nInstructor: Kosuke Shimamoto, kosuke.shimamoto@duke.edu\nOffice Hours: By appointment"
+  },
+  {
+    "objectID": "syllabus.html#course-principle",
+    "href": "syllabus.html#course-principle",
+    "title": "Julia for Empirical Economics",
+    "section": "Course Principle",
+    "text": "Course Principle\n\nThis module is designed to help students independently develop and implement their own empirical economics projects entirely in Julia.\nThis module is based on the idea that the most effective way to learn a programming language is to implement things yourself, even if you use extensive support from LLMs.\nThe lectures aim to give students a high-level understanding of how to use Julia and related computational techniques.\n\nI will move relatively quickly to introduce the main ideas across many topics.\n\nI will not cover every detail of the programming language in lecture.\nThis is because you can use LLMs to study many implementation details on your own.\n\nTo complement the lectures, this module assigns many hands-on exercises.\nThis module strongly encourages the use of LLMs. But of course, you remain responsible for their outputs."
+  },
+  {
+    "objectID": "syllabus.html#class-style",
+    "href": "syllabus.html#class-style",
+    "title": "Julia for Empirical Economics",
+    "section": "Class Style",
+    "text": "Class Style\n\nGiven the course principles, each class consists of a lecture and in-class activities.\nThe lecture portion will take about 90 minutes, and the remaining 55 minutes will be for in-class activities. You can ask the instructor any questions during the latter half of the class.\nIf you have finished the in-class activity for the day, you can work on the assignments, the final project, or your own work. The goal is to let you use class time productively."
+  },
+  {
+    "objectID": "syllabus.html#grading-and-assignments",
+    "href": "syllabus.html#grading-and-assignments",
+    "title": "Julia for Empirical Economics",
+    "section": "Grading and Assignments",
+    "text": "Grading and Assignments\nYour course grade will depend on three components:\n\nIn-class assignments (30%): There will be one in-class assignment for each class. You need to submit it within 24 hours after the class ends. The grade is on a binary scale and is evaluated by effort. If you write at least one line of code, you will receive full credit. You receive full credit for this component if you correctly submit 7 of the 9 assignments, so you may miss 2 assignments.\nThree coding homework assignments (40%): You will be assigned weekly assignments during this class. The grades are evaluated by correctness. Each student must submit their own answer. All assignments are equally weighted.\nFinal project (30%): You will be asked to complete a Monte Carlo simulation as the final project. The final project should be based on 1) your own work, 2) a paper you like, or 3) papers I suggest. More details are documented in a separate file.\n\n\nDue\n\nHW1: Jul 26, 23:59\nHW2: Aug 2, 23:59\nHW3: Aug 9, 23:59\nFinal Project: Aug 23, 23:59\n\nRequirements\n\nAll code must be written in Julia. You may call other languages from Julia if necessary.\nYou must submit your code and its outputs.\nYou can submit outputs in any format, such as PDF, HTML, or Word, except for the final project. The final project should be submitted as a PDF typeset in LaTeX because this is the format commonly expected for our research.\nI recommend submitting homework as HTML files compiled from Quarto, because Quarto integrates well with Julia and is easy to write in.\nBefore I introduce Git and GitHub, you will submit assignments via Canvas. After we learn GitHub, you must submit them via GitHub."
+  },
+  {
     "objectID": "index.html",
     "href": "index.html",
     "title": "Julia for Empirical Economics",
