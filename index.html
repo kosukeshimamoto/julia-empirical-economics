@@ -127,8 +127,9 @@ ul.task-list li input[type="checkbox"] {
 <ul>
 <li>Day 1 (Mon, Jul 20)
 <ul>
-<li>Course introduction (15 min)</li>
-<li>Julia basics (75 min)</li>
+<li>Course introduction (15 min) <a href="./lectures/course_intro.pdf">PDF</a></li>
+<li>Julia basics (75 min) <a href="./lectures/julia_basics.html">HTML</a></li>
+<li>In-class Assignment (<a href="./assignments/inclass-assignment/day1-assignment.qmd">QMarkdown</a> / <a href="./assignments/inclass-assignment/html/day1-assignment.html">HTML</a>)</li>
 </ul></li>
 <li>Day 2 (Tue, Jul 21)
 <ul>
@@ -174,7 +175,7 @@ ul.task-list li input[type="checkbox"] {
 <section id="assignments" class="level2">
 <h2 class="anchored" data-anchor-id="assignments">Assignments</h2>
 <ul>
-<li>HW1: Jul 26, 23:59</li>
+<li><a href="./assignments/weekly-assignment/weekly-assignment1.qmd">HW1</a>: Jul 26, 23:59</li>
 <li>HW2: Aug 2, 23:59</li>
 <li>HW3: Aug 9, 23:59</li>
 </ul>
@@ -261,7 +262,7 @@ ul.task-list li input[type="checkbox"] {
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp("https:\/\/kosukeshimamoto\.github\.io\/julia-empirical-economics\/");
+        var filterRegex = new RegExp('/' + window.location.host + '/');
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }

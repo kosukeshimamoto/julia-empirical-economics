@@ -1,0 +1,177 @@
+---
+title: "Weekly Assignment 1"
+engine: julia
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: true
+  eval: true
+  warning: false
+  message: false
+---
+
+::: {.callout-note}
+## General instructions
+
+- The details of each DGP, including its numerical parameters and distributions, are intentionally unspecified.
+  Choose them yourself, as you would in practice.
+- Choose nonzero true values for all parameters evaluated using the 5% relative-error criterion.
+- Grading criteria:
+  - If an objective-function plot is not minimized near the true parameters when identification is expected, half of the points for that part will be deducted.
+  - If an estimated parameter is not within 5% of its true value, half of the points for that part will be deducted.
+:::
+
+## Question 1: Maximum Likelihood Estimation (50 points)
+
+- Each consumer chooses among an outside option, Coffee A, and Coffee B.
+- Normalize the deterministic utility of the outside option to zero.
+- Write the deterministic utilities of the two products as
+
+  $$
+  V_{i1}=\alpha_1+\beta p_{i1},
+  \qquad
+  V_{i2}=\alpha_2+\beta p_{i2},
+  $$
+
+  where $p_{i1}$ and $p_{i2}$ are consumer-specific prices.
+- Assume that the utility shocks are independent Type-I extreme-value random variables with scale normalized to one.
+- Each consumer chooses the option with the highest total utility, defined as deterministic utility plus the utility shock.
+- Estimate $\theta=(\alpha_1,\alpha_2,\beta)'$.
+- Choose the parameter values and price distributions used in your DGP.
+
+### (a) Choice probabilities
+
+Write a function that computes the choice probabilities of the outside option, Coffee A, and Coffee B.
+
+```{julia}
+
+```
+
+### (b) Simulated data
+
+Write a function that simulates prices and choices from your DGP.
+Return the choice and the two prices for every consumer.
+
+```{julia}
+
+```
+
+### (c) Maximum-likelihood objective
+
+Write the negative log-likelihood function for the simulated choices.
+The function should accept a candidate parameter vector and the simulated dataset.
+
+```{julia}
+
+```
+
+### (d) Objective-function plots
+
+Plot the objective function around the true parameters.
+Vary one parameter at a time while holding the other two at their true values, and verify that each slice has a minimum near the truth.
+
+```{julia}
+
+```
+
+### (e) Maximum-likelihood estimates
+
+Minimize the negative log likelihood.
+Report the estimates.
+
+```{julia}
+
+```
+
+### (f) Identification without a normalized error scale
+
+Rewrite the objective function with an unknown positive error scale $\sigma$.
+The choice probabilities then depend on $V_{ij}/\sigma$.
+Plot the objective function while scaling all four parameters by the same positive constant, and verify that the four parameters are not jointly identified.
+
+```{julia}
+
+```
+
+## Question 2: Simulated Method of Moments (50 points)
+
+- Each worker begins unemployed and searches for a job in discrete periods $t=1,2,\ldots$.
+- In each period, the offer-arrival indicator satisfies
+
+  $$
+  A_{it}\sim\operatorname{Bernoulli}(\lambda),
+  $$
+
+  where $\lambda$ is the probability that worker $i$ receives an offer.
+- Conditional on $A_{it}=1$, the worker receives a wage offer $W_{it}$ drawn from a distribution $F_W$.
+- The worker follows the reservation-wage rule
+
+  $$
+  \text{accept the offer if and only if } W_{it}\ge r,
+  $$
+
+  where $r$ is the reservation wage.
+  After a rejection or a period without an offer, the worker remains unemployed and searches again in the next period.
+- For each worker, the econometrician observes
+
+  $$
+  D_i=\min\{t:A_{it}=1\text{ and }W_{it}\ge r\}
+  $$
+
+  and the accepted wage $W_i^{\mathrm{acc}}=W_{iD_i}$.
+- Estimate
+
+  $$
+  \theta=(\lambda,r)'
+  $$
+
+  by matching the mean unemployment duration and the mean accepted wage:
+
+  $$
+  \widehat m^{\mathrm{data}}
+  =
+  \begin{pmatrix}
+  \overline D\\
+  \overline W^{\mathrm{acc}}
+  \end{pmatrix}.
+  $$
+
+- Treat the wage-offer distribution and its parameters as known; estimate only the offer-arrival probability λ and the reservation wage r.
+- Choose and document the wage-offer distribution $F_W$ and the numerical parameters used in your DGP.
+
+### (a) Simulated job-search data
+
+Write a function that simulates unemployment durations and accepted wages.
+
+```{julia}
+
+```
+
+### (b) Sample analogues of the moments
+
+Write a function that returns the mean unemployment duration and the mean accepted wage.
+
+```{julia}
+
+```
+
+### (c) SMM objective function
+
+Write an objective function that compares the data moments with moments from a simulated sample.
+Scale each difference by the corresponding data moment and sum the two squared differences.
+Use the same simulation seed at every objective evaluation.
+
+```{julia}
+
+```
+
+### (d) SMM estimates
+
+Minimize the SMM objective with a derivative-free optimizer.
+Report the parameter estimates and fitted moments.
+
+```{julia}
+
+```

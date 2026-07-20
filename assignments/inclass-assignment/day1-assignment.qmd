@@ -1,0 +1,97 @@
+---
+title: "Day 1 In-class Assignment"
+engine: julia
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: true
+  eval: true
+  warning: false
+  message: false
+---
+
+::: {.callout-note}
+## Submission and grading
+
+- This assignment is graded based on effort. Edit this QMD file and submit it within 24 hours to receive full credit.
+- If you finish during class, you may leave, work on the weekly assignment, or do your own work.
+- Please do not hesitate to ask the instructor any questions.
+:::
+
+## Review questions
+
+- Q1. Your very first julia code! Following tradition, say "Hello world" in the below cell using println.
+
+```{julia}
+
+```
+
+- Q2. Create julia file with some codes and run it via Terminal.
+
+```{julia}
+
+```
+
+Workers are either employed or unemployed. Each month, 95% of employed workers remain employed, while 40% of unemployed workers find a job. Use the state order (employed, unemployed), and let the current distribution be $s_0 = [0.94\;\;0.06]$.
+
+- Q3. Construct the transition matrix $P$ and compute next month's distribution, $s_1 = s_0P$.
+
+```{julia}
+
+```
+
+- Q4. Define a function that computes $s_t = s_0P^t$. Use it to find the distribution after 12 months.
+
+```{julia}
+
+```
+
+- Q5. Increase the job-finding probability from 0.40 to 0.50. Compare the unemployment rate after 12 months.
+
+```{julia}
+
+```
+
+## Application: 2SLS
+
+Consider the model
+
+$$
+Y_i = \beta_0 + \beta_1 D_i + u_i,
+\qquad
+D_i = \gamma_0 + \gamma_1 Z_i + v_i,
+$$
+
+where $Y_i$ is the outcome, $D_i$ is an endogenous treatment, and $Z_i$ is an instrument. Assume that $Z_i$ is exogenous and relevant, while $u_i$ and $v_i$ are correlated.
+
+- Q6. Write separate functions to generate random draws and simulate the dataset. Make sure that $D_i$ is endogenous.
+
+```{julia}
+
+```
+
+- Q7. Write a function that computes the analytic OLS estimates from a regression of $Y_i$ on $D_i$.
+
+```{julia}
+
+```
+
+- Q8. Define the squared-loss function for the regression and plot it around the true values.
+
+```{julia}
+
+```
+
+- Q9. Write a function that computes the analytic 2SLS estimates of $\beta_0$ and $\beta_1$.
+
+```{julia}
+
+```
+
+- Q10. Define the method-of-moments objective function and plot it around the true values.
+
+```{julia}
+
+```
