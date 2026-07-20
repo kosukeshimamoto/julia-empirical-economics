@@ -30,7 +30,7 @@ This module offers the opportunity to learn Julia programming and practical skil
 
 ## Assignments
 
-- HW1: Jul 26, 23:59
+- [HW1](/assignments/weekly-assignment/weekly-assignment1.qmd): Jul 26, 23:59
 - HW2: Aug 2, 23:59
 - HW3: Aug 9, 23:59
 

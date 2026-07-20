@@ -1,6 +1,15 @@
 project:
   type: website
   output-dir: _site
+  render:
+    - index.qmd
+    - syllabus.qmd
+  resources:
+    - lectures/course_intro.pdf
+    - lectures/julia_basics.html
+    - assignments/inclass-assignment/day1-assignment.qmd
+    - assignments/inclass-assignment/html/day1-assignment.html
+    - assignments/weekly-assignment/weekly-assignment1.qmd
 
 website:
   title: "Empirical Economics with Julia"
