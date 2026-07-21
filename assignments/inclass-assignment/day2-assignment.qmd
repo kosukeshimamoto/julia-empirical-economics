@@ -1,0 +1,107 @@
+---
+title: "Day 2 In-class Assignment"
+engine: julia
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: true
+  eval: true
+  warning: false
+  message: false
+---
+
+::: {.callout-note}
+## Submission and grading
+
+- This assignment is graded based on effort. Edit this QMD file and submit it within 24 hours to receive full credit.
+- If you finish during class, you may leave, work on the weekly assignment, or do your own work.
+- Please do not hesitate to ask the instructor any questions.
+:::
+
+```{julia}
+using BenchmarkTools
+using InteractiveUtils
+using Random
+using Statistics
+
+Random.seed!(1234)
+```
+
+## Question 1: Pass inputs to functions
+
+The following function computes the share of simulated wages above a reservation wage.
+
+```{julia}
+wage_draws = 10.0 .+ randn(100_000)
+
+function acceptance_rate_global(reservation_wage)
+    accepted = 0
+
+    for wage in wage_draws
+        accepted += wage >= reservation_wage
+    end
+
+    return accepted / length(wage_draws)
+end
+```
+
+- Diagnose the function with `@code_warntype` and `@btime`.
+- Rewrite the function so that it receives the wage draws as an argument.
+- Verify that the two functions return the same result and compare their performance.
+
+```{julia}
+
+```
+
+## Question 2: Write type-stable code
+
+The following function computes total surplus from accepted wage offers.
+
+```{julia}
+function total_surplus_unstable(wages, reservation_wage)
+    total = 0
+
+    for wage in wages
+        if wage >= reservation_wage
+            total += wage - reservation_wage
+        end
+    end
+
+    return total
+end
+```
+
+- Evaluate the function when some offers are accepted and when all offers are rejected, and compare the return types.
+- Use `@code_warntype` to diagnose the function.
+- Rewrite the function so that it is type stable, and compare the two implementations.
+
+```{julia}
+
+```
+
+## Question 3: Reduce repeated allocations
+
+The following OLS objective creates temporary vectors at every evaluation.
+
+```{julia}
+function ols_objective_allocating(beta, x, y)
+    fitted = beta[1] .+ beta[2] .* x
+    residuals = y .- fitted
+    return mean(residuals .^ 2)
+end
+
+n = 100_000
+x = randn(n)
+y = 1.0 .+ 2.0 .* x .+ randn(n)
+beta = [1.0, 2.0]
+```
+
+- Measure the runtime and allocations of one objective evaluation.
+- Rewrite the objective without creating temporary vectors.
+- Compare the two functions when each objective is evaluated 100 times.
+
+```{julia}
+
+```

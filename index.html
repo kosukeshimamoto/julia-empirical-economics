@@ -133,8 +133,9 @@ ul.task-list li input[type="checkbox"] {
 </ul></li>
 <li>Day 2 (Tue, Jul 21)
 <ul>
-<li>High performance tips (30 min)</li>
-<li>Coding with AI (60 min)</li>
+<li>High performance tips (30 min) <a href="./lectures/high_performance_tips.html">HTML</a></li>
+<li>Coding with AI (60 min) <a href="./lectures/coding_with_ai.html">HTML</a></li>
+<li>In-class Assignment (<a href="./assignments/inclass-assignment/day2-assignment.qmd">qmd</a> / <a href="./assignments/inclass-assignment/html/day2-assignment.html">HTML</a>)</li>
 </ul></li>
 <li>Day 3 (Thu, Jul 23)
 <ul>
@@ -262,7 +263,7 @@ ul.task-list li input[type="checkbox"] {
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp('/' + window.location.host + '/');
+        var filterRegex = new RegExp("https:\/\/kosukeshimamoto\.github\.io\/julia-empirical-economics\/");
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }
