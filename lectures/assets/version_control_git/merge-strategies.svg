@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="680" viewBox="0 0 1200 680" role="img" aria-labelledby="merge-title merge-desc">
+  <title id="merge-title">Three strategies for integrating a feature branch</title>
+  <desc id="merge-desc">The starting history has commits A and B, followed by commit E on main and commits C and D on a feature branch. A merge commit preserves the branch and adds M. A squash merge combines C and D into S. A rebase merge replays C and D after E as C prime and D prime.</desc>
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#59636A"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: "Helvetica Neue", Arial, sans-serif; fill: #202428; }
+    .section-title { font-size: 26px; font-weight: 600; fill: #012169; }
+    .panel-title { font-size: 23px; font-weight: 600; fill: #012169; }
+    .panel-note { font-size: 16px; fill: #4F5863; }
+    .commit-label { font-size: 16px; font-weight: 600; fill: #FFFFFF; }
+    .main-line { stroke: #012169; stroke-width: 4; fill: none; }
+    .feature-line { stroke: #E07A25; stroke-width: 4; fill: none; }
+    .guide { stroke: #59636A; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+    .panel { fill: #F8FAFC; stroke: #DCE3E7; stroke-width: 2; }
+    .main-node { fill: #012169; }
+    .feature-node { fill: #E07A25; }
+    .result-node { fill: #389826; }
+  </style>
+
+  <text class="section-title" x="600" y="42" text-anchor="middle">Starting history</text>
+  <text class="panel-note" x="600" y="70" text-anchor="middle">The feature branch diverges after B while main advances to E.</text>
+
+  <path class="main-line" d="M405 125 L505 125 L705 125"/>
+  <path class="feature-line" d="M505 125 L605 205 L705 205"/>
+  <circle class="main-node" cx="405" cy="125" r="20"/>
+  <circle class="main-node" cx="505" cy="125" r="20"/>
+  <circle class="main-node" cx="705" cy="125" r="20"/>
+  <circle class="feature-node" cx="605" cy="205" r="20"/>
+  <circle class="feature-node" cx="705" cy="205" r="20"/>
+  <text class="commit-label" x="405" y="131" text-anchor="middle">A</text>
+  <text class="commit-label" x="505" y="131" text-anchor="middle">B</text>
+  <text class="commit-label" x="705" y="131" text-anchor="middle">E</text>
+  <text class="commit-label" x="605" y="211" text-anchor="middle">C</text>
+  <text class="commit-label" x="705" y="211" text-anchor="middle">D</text>
+  <text class="panel-note" x="750" y="131">main</text>
+  <text class="panel-note" x="750" y="211">feature</text>
+
+  <path class="guide" d="M600 245 L600 285"/>
+
+  <rect class="panel" x="20" y="305" width="370" height="330" rx="10"/>
+  <text class="panel-title" x="205" y="345" text-anchor="middle">Merge commit</text>
+  <text class="panel-note" x="205" y="372" text-anchor="middle">Preserves the branch and adds M</text>
+  <path class="main-line" d="M70 455 L145 455 L255 455 L340 455"/>
+  <path class="feature-line" d="M145 455 L205 535 L275 535 L340 455"/>
+  <circle class="main-node" cx="70" cy="455" r="18"/>
+  <circle class="main-node" cx="145" cy="455" r="18"/>
+  <circle class="main-node" cx="255" cy="455" r="18"/>
+  <circle class="feature-node" cx="205" cy="535" r="18"/>
+  <circle class="feature-node" cx="275" cy="535" r="18"/>
+  <circle class="result-node" cx="340" cy="455" r="18"/>
+  <text class="commit-label" x="70" y="461" text-anchor="middle">A</text>
+  <text class="commit-label" x="145" y="461" text-anchor="middle">B</text>
+  <text class="commit-label" x="255" y="461" text-anchor="middle">E</text>
+  <text class="commit-label" x="205" y="541" text-anchor="middle">C</text>
+  <text class="commit-label" x="275" y="541" text-anchor="middle">D</text>
+  <text class="commit-label" x="340" y="461" text-anchor="middle">M</text>
+
+  <rect class="panel" x="415" y="305" width="370" height="330" rx="10"/>
+  <text class="panel-title" x="600" y="345" text-anchor="middle">Squash merge</text>
+  <text class="panel-note" x="600" y="372" text-anchor="middle">Combines C and D into one commit S</text>
+  <path class="main-line" d="M465 455 L540 455 L650 455 L735 455"/>
+  <circle class="main-node" cx="465" cy="455" r="18"/>
+  <circle class="main-node" cx="540" cy="455" r="18"/>
+  <circle class="main-node" cx="650" cy="455" r="18"/>
+  <circle class="result-node" cx="735" cy="455" r="18"/>
+  <text class="commit-label" x="465" y="461" text-anchor="middle">A</text>
+  <text class="commit-label" x="540" y="461" text-anchor="middle">B</text>
+  <text class="commit-label" x="650" y="461" text-anchor="middle">E</text>
+  <text class="commit-label" x="735" y="461" text-anchor="middle">S</text>
+  <text class="panel-note" x="600" y="535" text-anchor="middle">C + D → S</text>
+
+  <rect class="panel" x="810" y="305" width="370" height="330" rx="10"/>
+  <text class="panel-title" x="995" y="345" text-anchor="middle">Rebase merge</text>
+  <text class="panel-note" x="995" y="372" text-anchor="middle">Replays C and D after E</text>
+  <path class="main-line" d="M850 455 L920 455 L990 455 L1060 455 L1130 455"/>
+  <circle class="main-node" cx="850" cy="455" r="18"/>
+  <circle class="main-node" cx="920" cy="455" r="18"/>
+  <circle class="main-node" cx="990" cy="455" r="18"/>
+  <circle class="result-node" cx="1060" cy="455" r="18"/>
+  <circle class="result-node" cx="1130" cy="455" r="18"/>
+  <text class="commit-label" x="850" y="461" text-anchor="middle">A</text>
+  <text class="commit-label" x="920" y="461" text-anchor="middle">B</text>
+  <text class="commit-label" x="990" y="461" text-anchor="middle">E</text>
+  <text class="commit-label" x="1060" y="461" text-anchor="middle">C′</text>
+  <text class="commit-label" x="1130" y="461" text-anchor="middle">D′</text>
+
+  <text class="panel-note" x="600" y="665" text-anchor="middle">Blue: existing main history · Orange: feature-branch commits · Green: commits added to main</text>
+</svg>

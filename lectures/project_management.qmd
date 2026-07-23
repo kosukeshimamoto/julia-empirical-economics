@@ -1,0 +1,326 @@
+---
+title: "Project Management and Coding Principles"
+engine: julia
+execute:
+  echo: true
+  eval: true
+  warning: false
+  message: false
+format:
+  html:
+    toc: true
+    embed-resources: true
+---
+
+## Motivation and Learning Goals
+
+::: {.callout-important title="Motivation" appearance="simple"}
+- LLMs can generate a large amount of code in seconds.
+- Without a disciplined project structure, the generated code can quickly become difficult to understand, validate, and reproduce.
+:::
+
+::: {.callout-important title="Learning Goals" appearance="simple"}
+- Learn how to organize a computational research project.
+- Use simple tools to make the workflow reproducible.
+- Apply coding principles that make code easier for humans and AI agents to review.
+:::
+
+## Directory Structure
+
+### One Example
+
+- The following tree shows my default structure for a computational research project.
+- The Git repository stores source code, documentation, and other files that benefit from version control.
+- External storage holds large data files and generated results.
+
+```text
+git-repository/
+├── src/
+├── scripts/
+├── memory/
+├── validation/
+├── reports/
+├── writeup/
+├── README.md
+├── Makefile
+├── data/ -> Dropbox/project/data/
+└── results/ -> Dropbox/project/results/
+
+Dropbox/project/
+├── data/
+│   ├── raw/
+│   └── processed/
+└── results/
+```
+
+### Purpose of Each Directory
+
+- **`src/`**
+  - Stores reusable functions, types, and modules.
+  - Example files include `blp_estimator.jl` and `solve_dynamic_game.jl`.
+- **`scripts/`**
+  - Stores entry-point programs that perform a specific task and may create output.
+  - Example files include:
+    - `clean_dataset_a.jl`;
+    - `merge_datasets.jl`; and
+    - `estimate_blp_demand.jl`.
+- **`memory/`**
+  - Stores durable project decisions, workflow notes, and implementation context.
+- **`validation/`**
+  - Stores code and QMD documents that check numerical or empirical results.
+- **`reports/`**
+  - Stores QMD documents used to share results with coauthors.
+- **`writeup/`**
+  - Stores paper drafts and presentation slides.
+- **`README.md`**
+  - Explains the project structure, environment setup, and canonical commands.
+  - A clear README helps both collaborators and AI agents navigate the project.
+- **`data/` and `results/`**
+  - Point to large files kept outside the Git repository in this example.
+  - Raw data, processed data, and generated results have distinct locations.
+
+::: {.callout-tip title="Scripts versus src" appearance="simple"}
+- How should we decide whether a function belongs in src or scripts?
+- Put a function in src if it implements core project logic or is used by two or more scripts.
+- Keep other functions in scripts, close to the workflow that uses them.
+:::
+
+::: {.callout-note title="This is one possible structure" appearance="simple"}
+- The exact directory names are less important than clear and stable distinctions.
+- On macOS, I use symbolic links to connect the data and results directories in the repository to folders stored in Dropbox.
+- This setup lets my code and AI coding agents follow the same project-relative paths from the repository root, making it easier to work with files stored outside the Git repository.
+- I have not tested this workflow on Windows, where symbolic links may require a different setup or behave differently.
+- Avoid hard-coded absolute paths. Build paths from the project root with tools such as `joinpath`.
+:::
+
+## Makefiles
+
+- A Makefile records commands under short target names and defines the order in which tasks should run.
+- Ideally, one command should reproduce all figures and tables in a project.
+  - Gentzkow and Shapiro emphasize this goal in their guide to research code and data.
+- A rule can contain:
+  - a **target**, which names the task;
+  - **prerequisites**, which must run first; and
+  - a **recipe**, which contains the commands.
+- The following example defines a small empirical workflow.
+
+```makefile
+.PHONY: all clean merge descriptive reduced_form
+
+all: descriptive reduced_form
+
+clean:
+	julia --project=. scripts/clean_dataset_a.jl
+	julia --project=. scripts/clean_dataset_b.jl
+
+merge: clean
+	julia --project=. scripts/merge_datasets.jl
+
+descriptive: merge
+	julia --project=. scripts/generate_descriptive_statistics.jl
+
+reduced_form: merge
+	julia --project=. scripts/estimate_reduced_form_1.jl
+	julia --project=. scripts/estimate_reduced_form_2.jl
+```
+
+- `make all` runs the complete workflow.
+- `make descriptive` runs data cleaning, data merging, and descriptive-statistics production.
+- `make reduced_form` runs data cleaning, data merging, and the two reduced-form estimations.
+- Each Makefile recipe line begins with a tab, not spaces.
+- Windows does not include `make` by default, so Windows users need an environment such as WSL or Git Bash with Make installed.
+- If the README or `AGENTS.md` identifies these targets as the canonical commands, an AI agent can use the same workflow as a human collaborator.
+
+## Coding Principles
+
+- AI-generated code still needs to be readable because readability makes mistakes easier to find.
+- The following principles are adapted from *The Art of Readable Code* for economics research and AI-assisted programming.
+
+### Names and Comments
+
+#### Use Clear and Accurate Names
+
+- A name should contain enough information to distinguish its role, but length alone does not make it clearer.
+  - Unclear: `df`, `temp`, `matrix_for_regressors`
+  - Too long: `individual_level_purchase_history_data`
+  - Clear in context: `purchase_history`, `regressor_matrix`
+- Short conventional names are acceptable when their meaning and scope are clear.
+  - `X` and `y` can be appropriate inside a short regression function.
+  - `i` and `j` can be appropriate in a short mathematical loop.
+- Use domain-specific iterator names when the indices have distinct meanings.
+
+```julia
+# Unclear
+for i in axes(transition_matrix, 1), j in axes(transition_matrix, 2)
+    update_probability!(transition_matrix, i, j)
+end
+
+# Clear
+for current_state in axes(transition_matrix, 1),
+    next_state in axes(transition_matrix, 2)
+    update_probability!(transition_matrix, current_state, next_state)
+end
+```
+
+- Use exact words.
+  - Prefer `maximum_iterations` to `iteration_limit_number`.
+  - Prefer a boolean name such as `is_child` or `is_under_twenty` to an ambiguous noun such as `child` or `twenty`.
+
+#### Avoid Redundant Comments
+
+- Do not use a comment only to restate an obvious line of code.
+
+```julia
+# Add one to the iteration counter.
+iteration += 1
+```
+
+- Use comments to explain information that the code cannot express directly.
+  - Explain the economic or numerical reason for a step.
+  - Record a non-obvious constraint or design choice.
+  - Summarize the purpose of a complicated block.
+
+```julia
+# Keep the same simulation draws across specifications so that differences
+# reflect the specification rather than Monte Carlo noise.
+rng = MersenneTwister(base_seed)
+```
+
+### Control Flow and Intermediate Objects
+
+#### Make Control Flow Easy to Read
+
+- Put the changing value on the left and the stable reference value on the right.
+  - Prefer `iteration >= maximum_iterations`.
+- Express conditions positively when possible.
+  - Prefer `is_valid_sample` to `!is_invalid_sample`.
+- Return early when an invalid case does not need the main logic.
+- Reduce nesting so that the main path remains visible.
+
+```julia
+# Harder to scan
+function estimate_if_valid(data)
+    if is_valid_sample(data)
+        estimate = estimate_model(data)
+        return estimate
+    else
+        return nothing
+    end
+end
+
+# Easier to scan
+function estimate_if_valid(data)
+    is_valid_sample(data) || return nothing
+    return estimate_model(data)
+end
+```
+
+#### Use Intermediate Objects Deliberately
+
+- Give a complicated condition a meaningful name when the name explains the logic.
+
+```julia
+has_enough_observations = nrow(data) >= minimum_observations
+has_finite_outcomes = all(isfinite, data.outcome)
+
+if has_enough_observations && has_finite_outcomes
+    estimate_model(data)
+end
+```
+
+- Do not introduce a temporary object that merely renames a simple expression used once.
+- Define a variable close to where it is used and keep its scope as small as practical.
+- Avoid mutable global variables in computational code.
+
+### Refactoring
+
+#### Give Each Function One Clear Purpose
+
+- Suppose a text file contains one temperature per line.
+- A single function can mix file input, calculation, and reporting.
+
+```julia
+function summarize_temperatures(path)
+    temperatures = parse.(Float64, readlines(path))
+    average_temperature = sum(temperatures) / length(temperatures)
+    println("Average temperature: $(round(average_temperature, digits=1)) °C")
+    return average_temperature
+end
+```
+
+- Separate these responsibilities when each one represents a meaningful operation.
+
+```julia
+function read_temperatures(path)
+    return parse.(Float64, readlines(path))
+end
+
+function calculate_average(temperatures)
+    return sum(temperatures) / length(temperatures)
+end
+
+function print_temperature_summary(average_temperature)
+    println("Average temperature: $(round(average_temperature, digits=1)) °C")
+end
+
+function summarize_temperatures(path)
+    temperatures = read_temperatures(path)
+    average_temperature = calculate_average(temperatures)
+    print_temperature_summary(average_temperature)
+    return average_temperature
+end
+```
+
+- In this example:
+  - `read_temperatures` handles file input;
+  - `calculate_average` performs the calculation;
+  - `print_temperature_summary` formats and displays the result; and
+  - `summarize_temperatures` coordinates the complete workflow.
+- Repeated nontrivial logic is a strong signal that it should become a function.
+- A function can also be useful when it is called only once if it isolates a meaningful step and makes the workflow easier to inspect.
+
+## Additional Tools for Working Across Computers
+
+### Dotfiles and chezmoi
+
+- Dotfiles are configuration files for shells, Git, editors, and other command-line tools.
+- Track only configuration files that you have inspected.
+  - Do not commit access tokens, credentials, session files, or other secrets.
+  - Do not automatically track an entire configuration directory such as `.codex/` or `.claude/`.
+- [chezmoi](https://www.chezmoi.io/) manages selected dotfiles across multiple computers.
+  - It stores a source state that can be tracked with Git.
+  - `chezmoi diff` previews the changes that would be made on the current computer.
+  - `chezmoi apply` updates the selected files.
+  - Templates can represent differences across macOS, Linux, and Windows.
+
+### Tailscale and SSH
+
+- [Tailscale](https://tailscale.com/docs/features/tailscale-ssh) creates a private network between computers.
+- Tailscale SSH can authenticate and authorize SSH connections according to the tailnet's access-control policies.
+- I use this type of setup to connect my laptop to another computer at home.
+- SSH determines where commands run.
+  - After connecting to a remote computer, commands execute in the remote shell.
+  - An AI coding CLI can work on the remote computer only if it is installed, authenticated, and permitted to access the relevant files and commands there.
+  - Opening an SSH connection alone does not give an AI tool additional access.
+
+### Shell Shortcuts
+
+- Shell aliases or functions can shorten commands that you run repeatedly.
+- For example, a shortcut can:
+  - move to a frequently used project directory; or
+  - connect to a named SSH host.
+
+```bash
+alias cd-cluster-project='cd /path/to/cluster/project'
+alias ssh-home='ssh home-desktop'
+```
+
+- These shortcuts save time, but their definitions differ across zsh, Bash, and PowerShell.
+
+## References
+
+- [Gentzkow and Shapiro, *Code and Data for the Social Sciences: A Practitioner's Guide*](https://web.stanford.edu/~gentzkow/research/CodeAndData.pdf)
+- Boswell and Foucher, *The Art of Readable Code*
+- [GNU Make Manual](https://www.gnu.org/software/make/manual/make.html)
+- [chezmoi documentation](https://www.chezmoi.io/)
+- [Tailscale SSH documentation](https://tailscale.com/docs/features/tailscale-ssh)

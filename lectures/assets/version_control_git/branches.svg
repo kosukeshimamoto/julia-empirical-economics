@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="390" viewBox="0 0 1200 390" role="img" aria-labelledby="branch-title branch-desc">
+  <title id="branch-title">A feature branch creates a separate line of work</title>
+  <desc id="branch-desc">The main and feature branches share commits A and B. Main then advances to E, while the feature branch adds commits C and D. The branches remain separate until their histories are merged.</desc>
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#59636A"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: "Helvetica Neue", Arial, sans-serif; fill: #202428; }
+    .title { font-size: 28px; font-weight: 600; fill: #012169; }
+    .subtitle { font-size: 17px; fill: #4F5863; }
+    .branch-label { font-size: 21px; font-weight: 600; }
+    .command { font-size: 17px; font-weight: 600; fill: #012169; }
+    .commit-label { font-size: 17px; font-weight: 600; fill: #FFFFFF; }
+    .main-line { stroke: #012169; stroke-width: 5; fill: none; }
+    .feature-line { stroke: #E07A25; stroke-width: 5; fill: none; }
+    .guide { stroke: #59636A; stroke-width: 2; fill: none; stroke-dasharray: 5 5; marker-end: url(#arrowhead); }
+    .main-node { fill: #012169; }
+    .feature-node { fill: #E07A25; }
+  </style>
+
+  <text class="title" x="600" y="42" text-anchor="middle">A branch creates a separate line of work</text>
+  <text class="subtitle" x="600" y="72" text-anchor="middle">Both branches share the same history through B, then record different commits.</text>
+
+  <path class="main-line" d="M155 205 L355 205 L705 205"/>
+  <path class="feature-line" d="M355 205 L525 325 L705 325"/>
+
+  <circle class="main-node" cx="155" cy="205" r="22"/>
+  <circle class="main-node" cx="355" cy="205" r="22"/>
+  <circle class="main-node" cx="705" cy="205" r="22"/>
+  <circle class="feature-node" cx="525" cy="325" r="22"/>
+  <circle class="feature-node" cx="705" cy="325" r="22"/>
+
+  <text class="commit-label" x="155" y="211" text-anchor="middle">A</text>
+  <text class="commit-label" x="355" y="211" text-anchor="middle">B</text>
+  <text class="commit-label" x="705" y="211" text-anchor="middle">E</text>
+  <text class="commit-label" x="525" y="331" text-anchor="middle">C</text>
+  <text class="commit-label" x="705" y="331" text-anchor="middle">D</text>
+
+  <text class="branch-label" x="770" y="212" fill="#012169">main</text>
+  <text class="branch-label" x="770" y="332" fill="#E07A25">feature</text>
+
+  <text class="command" x="445" y="122" text-anchor="middle">git switch -c feature</text>
+  <path class="guide" d="M445 135 C420 155, 390 170, 365 187"/>
+</svg>

@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="260" viewBox="0 0 1200 260" role="img" aria-labelledby="workflow-title workflow-desc">
+  <title id="workflow-title">The minimum Git workflow</title>
+  <desc id="workflow-desc">Four boxes show changes moving from the working directory to the staging area, the local repository, and the remote repository. The arrows are labeled git add, git commit, and git push.</desc>
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#59636A"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: "Helvetica Neue", Arial, sans-serif; fill: #202428; }
+    .box { fill: #FFFFFF; stroke: #012169; stroke-width: 3; }
+    .box-title { font-size: 25px; font-weight: 600; fill: #012169; }
+    .box-note { font-size: 16px; fill: #4F5863; }
+    .command { font-size: 18px; font-weight: 600; fill: #012169; }
+    .arrow { stroke: #59636A; stroke-width: 3; marker-end: url(#arrowhead); }
+  </style>
+
+  <rect class="box" x="20" y="80" width="235" height="130" rx="8"/>
+  <text class="box-title" x="137.5" y="126" text-anchor="middle">
+    <tspan x="137.5">Working</tspan>
+    <tspan x="137.5" dy="30">Directory</tspan>
+  </text>
+  <text class="box-note" x="137.5" y="187" text-anchor="middle">Files you edit</text>
+
+  <rect class="box" x="325" y="80" width="235" height="130" rx="8"/>
+  <text class="box-title" x="442.5" y="126" text-anchor="middle">
+    <tspan x="442.5">Staging</tspan>
+    <tspan x="442.5" dy="30">Area</tspan>
+  </text>
+  <text class="box-note" x="442.5" y="187" text-anchor="middle">Changes for the next commit</text>
+
+  <rect class="box" x="630" y="80" width="235" height="130" rx="8"/>
+  <text class="box-title" x="747.5" y="126" text-anchor="middle">
+    <tspan x="747.5">Local</tspan>
+    <tspan x="747.5" dy="30">Repository</tspan>
+  </text>
+  <text class="box-note" x="747.5" y="187" text-anchor="middle">History on your computer</text>
+
+  <rect class="box" x="935" y="80" width="235" height="130" rx="8"/>
+  <text class="box-title" x="1052.5" y="126" text-anchor="middle">
+    <tspan x="1052.5">Remote</tspan>
+    <tspan x="1052.5" dy="30">Repository</tspan>
+  </text>
+  <text class="box-note" x="1052.5" y="187" text-anchor="middle">History shared on GitHub</text>
+
+  <line class="arrow" x1="266" y1="145" x2="314" y2="145"/>
+  <text class="command" x="290" y="59" text-anchor="middle">git add</text>
+
+  <line class="arrow" x1="571" y1="145" x2="619" y2="145"/>
+  <text class="command" x="595" y="59" text-anchor="middle">git commit</text>
+
+  <line class="arrow" x1="876" y1="145" x2="924" y2="145"/>
+  <text class="command" x="900" y="59" text-anchor="middle">git push</text>
+</svg>

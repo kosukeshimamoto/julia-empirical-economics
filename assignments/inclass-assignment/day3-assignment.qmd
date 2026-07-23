@@ -1,0 +1,253 @@
+---
+title: "Day 3 In-class Assignment"
+engine: julia
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: true
+  eval: true
+  warning: false
+  message: false
+---
+
+::: {.callout-note}
+## Submission and grading
+
+- This assignment is graded based on effort. Edit this QMD file and submit it within 24 hours to receive full credit.
+- If you finish during class, you may leave, work on the weekly assignment, or do your own work.
+- Please do not hesitate to ask the instructor any questions.
+:::
+
+::: {.callout-note title="How to Complete This Assignment"}
+- This assignment focuses on Git operations, so all Julia code is provided.
+- The Git commands are included as a reference. You may use AI tools or `lazygit` instead; you do not need to use these exact commands.
+:::
+
+## Question 1: Set up the Git environment on your computer
+
+1. If you have not already done so, install Git and the GitHub CLI (`gh`), and create a GitHub account.
+2. Configure Git with your name and the email address associated with your GitHub account.
+
+    ```bash
+    git config --global user.name "Your Name"
+    git config --global user.email "your-email@example.com"
+    git config --global --list
+    ```
+
+3. Log in to GitHub and verify the authentication.
+
+    ```bash
+    gh auth login
+    gh auth status
+    ```
+
+## Question 2: Set up your repository for this class
+
+1. On the GitHub website, create a repository named `julia-empirical-economics-assignment`.
+    - Set its visibility to **Private** so that your coursework is not publicly accessible.
+    - Initialize the repository with a README.
+2. Add `kosukeshimamoto` as a collaborator under **Settings > Collaborators**.
+3. Clone the repository and enter its directory. Replace `YOUR-GITHUB-USERNAME` with your information.
+
+    ```bash
+    git clone https://github.com/YOUR-GITHUB-USERNAME/julia-empirical-economics-assignment.git
+    cd julia-empirical-economics-assignment
+    ```
+
+::: {.callout-note title="Optional: Clone with ghq"}
+- If you already use ghq, you may use it instead of the preceding `git clone` command.
+
+    ```bash
+    ghq get YOUR-GITHUB-USERNAME/julia-empirical-economics-assignment
+    cd "$(ghq root)/github.com/YOUR-GITHUB-USERNAME/julia-empirical-economics-assignment"
+    ```
+:::
+
+## Question 3: Complete the initial repository setup
+
+1. Create the following directory structure.
+
+    ```text
+    julia-empirical-economics-assignment/
+    ├── inclass-assignment/
+    │   ├── day1-assignment.qmd
+    │   └── day2-assignment.qmd
+    ├── weekly-assignment/
+    ├── final-project/
+    ├── src/
+    ├── scripts/
+    ├── Makefile
+    └── README.md
+    ```
+
+::: {.callout-note title="Empty Directories"}
+Git does not track empty directories. It is fine if an empty directory does not appear on GitHub until you add a file to it.
+:::
+
+2. Place the Day 1 and Day 2 in-class assignment files in `inclass-assignment/`.
+3. Inspect, stage, and commit the initial repository structure.
+
+    ```bash
+    git status
+    git diff
+    git add .
+    git diff --staged
+    git commit -m "Set up coursework repository"
+    ```
+
+4. Push the commit and inspect the history.
+
+    ```bash
+    git push
+    git log --oneline
+    ```
+
+5. On GitHub, confirm that the files and the new commit appear in the repository.
+
+## Question 4: Get and start the Day 3 in-class assignment
+
+1. If the [public course repository](https://github.com/kosukeshimamoto/julia-empirical-economics) is not on your computer, clone it into the directory that contains your private assignment repository.
+
+    ```bash
+    git clone https://github.com/kosukeshimamoto/julia-empirical-economics.git
+    ```
+
+2. If you cloned the public course repository earlier, open it in your terminal and pull the latest version.
+
+    ```bash
+    git pull
+    ```
+
+3. Open your private assignment repository in your terminal. Create and switch to a branch named `day3-assignment`.
+
+    ```bash
+    git switch -c day3-assignment
+    git branch --show-current
+    ```
+
+4. Confirm that the final command prints `day3-assignment`.
+5. Using Finder or another file manager, copy `assignments/inclass-assignment/day3-assignment.qmd` from the public course repository into `inclass-assignment/` in your private assignment repository.
+6. Confirm that `inclass-assignment/day3-assignment.qmd` now exists in your private assignment repository.
+
+## Question 5: Add a Small Julia Workflow
+
+The code below is provided because the purpose of this exercise is to practice project organization and the Git workflow.
+
+The data-generating process is the linear model
+
+$$
+y = X\beta + \varepsilon.
+$$
+
+The OLS estimator computes $\hat{\beta}$ from the generated data.
+
+1. Create `src/ols.jl` with a data struct, a data-generating function, and an OLS estimator.
+
+    ```julia
+    using LinearAlgebra
+    using Random
+
+    struct OLSData
+        β_true::Vector{Float64}
+        X::Matrix{Float64}
+        y::Vector{Float64}
+    end
+
+    function generate_data(n; seed = 1234)
+        rng = MersenneTwister(seed)
+        β_true = [1.0, 2.0]
+        X = hcat(ones(n), randn(rng, n))
+        y = X * β_true + randn(rng, n)
+        return OLSData(β_true, X, y)
+    end
+
+    estimate_ols(data::OLSData) = data.X \ data.y
+    ```
+
+2. Create `scripts/run_ols.jl` with a `main()` wrapper.
+
+    ```julia
+    include(joinpath(@__DIR__, "..", "src", "ols.jl"))
+
+    function main()
+        data = generate_data(1_000)
+        β_hat = estimate_ols(data)
+
+        println("True coefficients: ", data.β_true)
+        println("Estimated coefficients: ", β_hat)
+
+        return β_hat
+    end
+
+    if abspath(PROGRAM_FILE) == @__FILE__
+        main()
+    end
+    ```
+
+3. Use the following cell in `inclass-assignment/day3-assignment.qmd` to load the script and call the wrapper.
+
+    ```{julia}
+    script_path = joinpath(@__DIR__, "..", "scripts", "run_ols.jl")
+
+    if isfile(script_path)
+        include(script_path)
+        estimated_coefficients = main()
+    else
+        @info "Create scripts/run_ols.jl before running this cell."
+    end
+    ```
+
+    The estimated coefficients should be close to the true coefficients `[1.0, 2.0]`.
+
+4. Create the following `Makefile`. The command under `run:` must begin with a tab.
+
+    ```makefile
+    .PHONY: run
+
+    run:
+    	julia scripts/run_ols.jl
+    ```
+
+    From the repository root, run the script and verify that it prints the true and estimated coefficients.
+
+    ```bash
+    make run
+    ```
+
+5. Inspect, stage, and commit the completed work.
+
+    ```bash
+    git status
+    git diff
+    git add src/ols.jl scripts/run_ols.jl inclass-assignment/day3-assignment.qmd Makefile
+    git diff --staged
+    git commit -m "Complete Day 3 assignment"
+    ```
+
+## Question 6: Finish your work
+
+1. Push the branch to GitHub.
+
+    ```bash
+    git push --set-upstream origin day3-assignment
+    ```
+
+2. Open a pull request.
+
+    ```bash
+    gh pr create \
+        --title "Complete Day 3 assignment" \
+        --body "I finished the Day 3 homework. Please review it."
+    ```
+
+3. Add the instructor as a reviewer.
+
+    ```bash
+    gh pr edit --add-reviewer kosukeshimamoto
+    ```
+
+- From now on, you will work on your code in this folder.
+- You can submit your homework by creating a branch and opening a pull request.
+- The commit time is treated as the submission time.

@@ -7,6 +7,8 @@ project:
   resources:
     - lectures/course_intro.pdf
     - lectures/julia_basics.html
+    - lectures/version_control_git.html
+    - lectures/project_management.html
     - assignments/inclass-assignment/day1-assignment.qmd
     - assignments/inclass-assignment/html/day1-assignment.html
     - assignments/weekly-assignment/weekly-assignment1.qmd
