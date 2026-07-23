@@ -21,8 +21,9 @@ This module offers the opportunity to learn Julia programming and practical skil
 - Time
   - July 20 - August 6, 2026
   - Mon, Tue, and Thu, 12:30pm - 2:55pm
-- Location: Social Sciences 119
+- Location: Social Sciences 105
 - [Syllabus](syllabus.qmd)
+- [GitHub repository](https://github.com/kosukeshimamoto/julia-empirical-economics)
 
 ## Lecture Schedule
 
