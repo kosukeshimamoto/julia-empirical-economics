@@ -1,0 +1,342 @@
+---
+title: "Day 4 In-class Assignment"
+engine: julia
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: true
+  eval: true
+  warning: false
+  message: false
+---
+
+::: {.callout-note}
+## Submission and grading
+
+- This assignment is graded based on effort. Edit this QMD file and submit it within 24 hours to receive full credit.
+- If you finish during class, you may leave, work on the weekly assignment, or do your own work.
+- Please do not hesitate to ask the instructor any questions.
+:::
+
+::: {.callout-note title="How to Complete This Assignment"}
+- The data-generating code is provided. Answer the questions below using the generated datasets.
+:::
+
+## Data-generating processes
+
+### FE-IV data
+
+- The idea is to create panel data with an endogenous treatment variable and fixed effects.
+- **Observation unit:** Each observation is a unit-year pair $(i,t)$, with 300 units observed from 2011 through 2020.
+- **Variables:** $Y_{it}$ is the outcome, $D_{it}$ is the endogenous treatment, $X_{it}$ is an observed control, and $Z_{it}$ is the instrument.
+- **Set of equations:**
+
+$$
+Z_{it}
+=
+0.7\alpha_i+\varepsilon^Z_{it}.
+$$
+
+$$
+D_{it}
+=
+0.9Z_{it}
++0.5X_{it}
++0.8\alpha_i
++0.9U_{it}
++0.5\varepsilon^D_{it}.
+$$
+
+$$
+Y_{it}
+=
+2D_{it}
++0.7X_{it}
++\alpha_i
++\lambda_t
++U_{it}
++\varepsilon^Y_{it}.
+$$
+
+- **Distributional assumptions:** $\alpha_i$ and $\lambda_t$ are the unit and year effects, and $U_{it}$ is an unobserved confounder. All draws are mutually independent.
+
+$$
+\alpha_i
+\overset{\mathrm{iid}}{\sim}
+\mathcal{N}(0,1).
+$$
+
+$$
+\lambda_t
+\overset{\mathrm{iid}}{\sim}
+\mathcal{N}(0,0.3^2).
+$$
+
+$$
+X_{it},\,U_{it}
+\overset{\mathrm{iid}}{\sim}
+\mathcal{N}(0,1).
+$$
+
+$$
+\varepsilon^Z_{it},\,
+\varepsilon^D_{it},\,
+\varepsilon^Y_{it}
+\overset{\mathrm{iid}}{\sim}
+\mathcal{N}(0,1).
+$$
+
+```{julia}
+#| label: generate-fe-iv-data
+#| code-fold: true
+#| code-summary: "Show data-generating code"
+using DataFrames
+using Random
+
+function generate_fe_iv_data(;
+    number_of_units = 300,
+    years = 2011:2020,
+    seed = 2_026_072_601,
+)
+    rng = MersenneTwister(seed)
+    unit_effects = randn(rng, number_of_units)
+    year_effects = Dict(year => 0.3 * randn(rng) for year in years)
+    rows = NamedTuple[]
+
+    for unit_id in 1:number_of_units
+        unit_effect = unit_effects[unit_id]
+        for year in years
+            x = randn(rng)
+            confounder = randn(rng)
+            z = 0.7 * unit_effect + randn(rng)
+            d = (
+                0.9 * z +
+                0.5 * x +
+                0.8 * unit_effect +
+                0.9 * confounder +
+                0.5 * randn(rng)
+            )
+            y = (
+                2.0 * d +
+                0.7 * x +
+                unit_effect +
+                year_effects[year] +
+                confounder +
+                randn(rng)
+            )
+
+            push!(rows, (; unit_id, year, y, d, x, z))
+        end
+    end
+
+    return DataFrame(rows)
+end
+
+fe_iv_source = generate_fe_iv_data()
+first(fe_iv_source, 5)
+```
+
+### Event-study data
+
+- The idea is to generate panel data with dynamic treatment effects.
+- **Observation unit:** Each observation is a county-year pair $(i,t)$, with 1,200 counties observed from 2010 through 2020.
+- **Variables:** $X_{it}$ is log population, $Y_{it}$ is the employment rate, and $G_i$ is the first treatment year. Counties with $G_i=0$ are never treated.
+- **Set of equations:**
+
+$$
+s_t=t-2010.
+$$
+
+$$
+B_i
+=
+10+0.35\eta_i.
+$$
+
+$$
+\alpha_i
+=
+2.5a_i.
+$$
+
+$$
+X_{it}
+=
+B_i+0.012s_t+0.08\nu_{it}.
+$$
+
+$$
+D_{it}
+=
+\mathbf{1}\{G_i>0,\ t\geq G_i\}.
+$$
+
+$$
+\tau_{it}
+=
+\begin{cases}
+-1.0-0.5\min(t-G_i,3),
+&G_i>0\ \text{and}\ t\geq G_i,\\
+0,
+&\text{otherwise},
+\end{cases}
+.
+$$
+
+$$
+Y_{it}(0)
+=
+55+\alpha_i+1.5(X_{it}-10)
++0.30s_t+0.05s_t^2+1.5\varepsilon_{it}.
+$$
+
+$$
+Y_{it}
+=
+Y_{it}(0)+\tau_{it}.
+$$
+
+- **Distributional assumptions:** Treatment cohorts contain equal numbers of counties and are assigned at random. All shocks are mutually independent.
+
+$$
+\Pr(G_i=g)
+=
+\frac{1}{4},
+\qquad
+g\in\{0,2014,2016,2018\}.
+$$
+
+$$
+\eta_i,\,a_i
+\overset{\mathrm{iid}}{\sim}
+\mathcal{N}(0,1).
+$$
+
+$$
+\nu_{it},\,\varepsilon_{it}
+\overset{\mathrm{iid}}{\sim}
+\mathcal{N}(0,1).
+$$
+
+```{julia}
+#| label: generate-event-study-data
+#| code-fold: true
+#| code-summary: "Show data-generating code"
+function generate_event_study_data(;
+    number_of_counties = 1_200,
+    years = 2010:2020,
+    treatment_cohorts = [0, 2014, 2016, 2018],
+    seed = 2_026_072_501,
+)
+    rng = MersenneTwister(seed)
+    counties_per_cohort = number_of_counties ÷ length(treatment_cohorts)
+    first_treatment = repeat(treatment_cohorts; inner = counties_per_cohort)
+    shuffle!(rng, first_treatment)
+
+    baseline_log_population = 10 .+ 0.35 .* randn(rng, number_of_counties)
+    county_effects = 2.5 .* randn(rng, number_of_counties)
+    rows = NamedTuple[]
+
+    for county_id in 1:number_of_counties
+        first_treat = first_treatment[county_id]
+        for year in years
+            time_index = year - first(years)
+            treated = first_treat > 0 && year >= first_treat
+            event_time = treated ? year - first_treat : missing
+            true_effect = treated ? -1.0 - 0.5 * min(event_time, 3) : 0.0
+            log_population = (
+                baseline_log_population[county_id] +
+                0.012 * time_index +
+                0.08 * randn(rng)
+            )
+            employment_rate = (
+                55.0 +
+                county_effects[county_id] +
+                1.5 * (log_population - 10.0) +
+                0.30 * time_index +
+                0.05 * time_index^2 +
+                1.5 * randn(rng) +
+                true_effect
+            )
+
+            push!(
+                rows,
+                (;
+                    county_id,
+                    year,
+                    first_treat,
+                    treated,
+                    event_time,
+                    log_population,
+                    employment_rate,
+                    true_effect,
+                ),
+            )
+        end
+    end
+
+    return DataFrame(rows)
+end
+
+event_study_source = generate_event_study_data()
+first(event_study_source, 5)
+```
+
+## Question 1: Save the datasets
+
+- Save both generated datasets.
+- You may save them as CSV files or store them in DuckDB.
+
+```{julia}
+
+```
+
+## Question 2: Load the datasets
+
+- Load the saved datasets as DataFrames named `fe_iv_data` and `event_study_data`.
+- You may read the CSV files or query DuckDB.
+
+```{julia}
+
+```
+
+## Question 3: Report descriptive statistics
+
+- Report descriptive statistics for the main variables in each dataset.
+
+```{julia}
+
+```
+
+## Question 4: Estimate the treatment effect with FE-IV
+
+- Use `FixedEffectModels.jl` to estimate the model. Check whether the estimate recovers the true value.
+  - Instrument `d` with `z`.
+  - Control for `x`.
+  - Include unit and year fixed effects.
+  - Cluster standard errors by unit.
+
+```{julia}
+
+```
+
+## Question 5: Estimate an event study
+
+- Pass `event_study_data` to R with `RCall.jl`.
+- Use `did::att_gt()` to estimate group-time average treatment effects.
+- Use `did::aggte(..., type = "dynamic")` to aggregate them by event time.
+  - Return the overall ATT and dynamic effects to Julia and display them as DataFrames.
+  - Display the DataFrames and figure in the rendered Quarto document.
+- Use `did::ggdid()` to produce the event-study figure and `ggplot2::ggsave()` to save it.
+
+```{julia}
+
+```
+
+- Insert the saved figure with the following Quarto Markdown:
+
+  ```markdown
+  ![Event-study estimates produced by R's `did` package.](day4-did-event-study.png){width=75% fig-align="center"}
+  ```

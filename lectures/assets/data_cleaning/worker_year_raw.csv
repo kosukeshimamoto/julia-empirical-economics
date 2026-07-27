@@ -1,0 +1,10 @@
+Worker ID,Year,Firm ID,Weekly Hours,Overtime Hours,Employment Status,Occupation
+ W001,2022,F01,40,5,Employed,Manager
+ W001,2023,F01,42,3,EMPLOYED,manager
+ W001,2024,F02,not reported,0,employed,MANAGER
+W002 ,2022,F01,35,2,Employed,Clerk
+W002 ,2023,F01,NA,0,Not employed,clerk
+W002 ,2024,F03,38,4,EMPLOYED,Clerk
+W003,2022,F02,30,6,employed,Technician
+W003,2023,F02,32,5,Employed,TECHNICIAN
+W003,2024,F02,34,4,EMPLOYED,technician
