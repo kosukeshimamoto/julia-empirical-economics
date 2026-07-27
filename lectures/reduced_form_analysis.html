@@ -2370,8 +2370,9 @@ Motivation
 </div>
 <div class="callout-body-container callout-body">
 <ul>
-<li>We want to summarize empirical patterns in the data.</li>
-<li>We want to estimate common reduced-form specifications in Julia.</li>
+<li>Structural estimation approach works best when clear empirical patterns motivate the structural model.</li>
+<li>To find these patterns, we want to run standardized reduced-form analyses quickly.</li>
+<li>Event-study plots, in particular, have become common in applied microeconomics.</li>
 </ul>
 </div>
 </div>
@@ -2386,9 +2387,8 @@ Learning Goals
 </div>
 <div class="callout-body-container callout-body">
 <ul>
-<li>Produce descriptive statistics and correlations.</li>
-<li>Estimate OLS, instrumental-variable, and fixed-effects models.</li>
-<li>Implement difference-in-differences and regression-discontinuity analyses.</li>
+<li>Learn how to estimate OLS, IV, and FE models in Julia.</li>
+<li>Learn how to estimate DiD models, including event-study specifications, and RD models by calling R from Julia.</li>
 </ul>
 </div>
 </div>
@@ -2396,13 +2396,14 @@ Learning Goals
 <section id="generate-the-panel-data" class="level2">
 <h2 class="anchored" data-anchor-id="generate-the-panel-data">Generate the Panel Data</h2>
 <ul>
-<li>This synthetic example is inspired by the minimum-wage application in <a href="https://doi.org/10.1016/j.jeconom.2020.12.001">Callaway and Sant’Anna (2021)</a>.</li>
-<li>It is not a replication of their data or empirical results.</li>
+<li>I generate an example dataset for this lecture note.</li>
+<li>This example is inspired by the minimum-wage application in <a href="https://doi.org/10.1016/j.jeconom.2020.12.001">Callaway and Sant’Anna (2021)</a>.
+<ul>
 <li>The panel contains 1,200 counties observed from 2001 through 2010.</li>
 <li>Counties first become treated in 2004, 2006, or 2008, or remain untreated.</li>
 <li>Treatment cohorts are assigned at random.</li>
 <li>The outcome is the teen employment rate, measured in percentage points.</li>
-<li>The treatment effect is known, so we can compare it with the estimates.</li>
+</ul></li>
 </ul>
 <div class="callout callout-style-simple callout-note callout-titled" title="Data-generating process">
 <div class="callout-header d-flex align-content-center">
@@ -2885,13 +2886,13 @@ Figure 1: Correlation heatmap
 <span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">fe</span>(time_id)</span>
 <span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <ul>
-<li><p><code>y</code> is the outcome variable.</p></li>
-<li><p><code>x_exogenous</code> is an exogenous regressor in the coefficient part of the formula.</p></li>
-<li><p>The left side of the inner <code>~</code> lists the endogenous regressors.</p></li>
-<li><p>The right side of the inner <code>~</code> lists the excluded instruments. The model needs at least as many instruments as endogenous regressors.</p></li>
-<li><p><code>fe(unit_id)</code> and <code>fe(time_id)</code> absorb unit and time fixed effects.</p></li>
-<li><p>Without the inner <code>(endogenous ~ instruments)</code> term, <code>reg</code> estimates OLS with the specified fixed effects.</p></li>
-<li><p>The example below uses the panel generated above and estimates an OLS model with county and year fixed effects.</p></li>
+<li><code>y</code> is the outcome variable.</li>
+<li><code>x_exogenous</code> is an exogenous regressor in the coefficient part of the formula.</li>
+<li>The left side of the inner <code>~</code> lists the endogenous regressors.</li>
+<li>The right side of the inner <code>~</code> lists the excluded instruments. The model needs at least as many instruments as endogenous regressors.</li>
+<li><code>fe(unit_id)</code> and <code>fe(time_id)</code> absorb unit and time fixed effects.</li>
+<li>Without the inner <code>(endogenous ~ instruments)</code> term, <code>reg</code> estimates OLS with the specified fixed effects.</li>
+<li>The example below uses the panel generated above and estimates an OLS model with county and year fixed effects.</li>
 </ul>
 <div id="cell-ols-with-fixed-effects" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb8"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">FixedEffectModels</span></span>
@@ -2982,12 +2983,20 @@ padding-right: 0.8em;
 <div id="cell-run-r-with-rcall" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb9"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RCall</span></span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>julia_values <span class="op">=</span> [<span class="fl">1</span>, <span class="fl">2</span>, <span class="fl">3</span>, <span class="fl">4</span>]</span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="pp">@rput</span> julia_values</span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>r_mean <span class="op">=</span> <span class="fu">rcopy</span>(R<span class="st">&quot;mean(julia_values)&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>R<span class="st">&quot;&quot;&quot;</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="st">r_values &lt;- c(1, 2, 3, 4)</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="st">r_mean &lt;- mean(r_values)</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="st">&quot;&quot;&quot;</span>;</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>r_mean_with_rcopy <span class="op">=</span> <span class="fu">rcopy</span>(R<span class="st">&quot;r_mean&quot;</span>)</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="pp">@rget</span> r_mean</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>(</span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>    with_rcopy <span class="op">=</span> r_mean_with_rcopy,</span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>    with_rget <span class="op">=</span> r_mean,</span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div id="run-r-with-rcall" class="cell-output cell-output-display" data-execution_count="1">
-<pre><code>2.5</code></pre>
+<pre><code>(with_rcopy = 2.5, with_rget = 2.5)</code></pre>
 </div>
 </div>
 </section>

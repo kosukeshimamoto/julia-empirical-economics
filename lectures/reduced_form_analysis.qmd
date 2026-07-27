@@ -15,25 +15,24 @@ format:
 ## Motivation and Learning Goals
 
 ::: {.callout-important title="Motivation" appearance="simple"}
-- We want to summarize empirical patterns in the data.
-- We want to estimate common reduced-form specifications in Julia.
+- Structural estimation approach works best when clear empirical patterns motivate the structural model.
+- To find these patterns, we want to run standardized reduced-form analyses quickly.
+- Event-study plots, in particular, have become common in applied microeconomics.
 :::
 
 ::: {.callout-important title="Learning Goals" appearance="simple"}
-- Produce descriptive statistics and correlations.
-- Estimate OLS, instrumental-variable, and fixed-effects models.
-- Implement difference-in-differences and regression-discontinuity analyses.
+- Learn how to estimate OLS, IV, and FE models in Julia.
+- Learn how to estimate DiD models, including event-study specifications, and RD models by calling R from Julia.
 :::
 
 ## Generate the Panel Data
 
-- This synthetic example is inspired by the minimum-wage application in [Callaway and Sant'Anna (2021)](https://doi.org/10.1016/j.jeconom.2020.12.001).
-- It is not a replication of their data or empirical results.
-- The panel contains 1,200 counties observed from 2001 through 2010.
-- Counties first become treated in 2004, 2006, or 2008, or remain untreated.
-- Treatment cohorts are assigned at random.
-- The outcome is the teen employment rate, measured in percentage points.
-- The treatment effect is known, so we can compare it with the estimates.
+- I generate an example dataset for this lecture note.
+- This example is inspired by the minimum-wage application in [Callaway and Sant'Anna (2021)](https://doi.org/10.1016/j.jeconom.2020.12.001).
+  - The panel contains 1,200 counties observed from 2001 through 2010.
+  - Counties first become treated in 2004, 2006, or 2008, or remain untreated.
+  - Treatment cohorts are assigned at random.
+  - The outcome is the teen employment rate, measured in percentage points.
 
 ::: {.callout-note title="Data-generating process" appearance="simple"}
 - Let $s_t=t-2001$ denote time since the first sample year.
@@ -267,7 +266,6 @@ correlation_heatmap
 - The right side of the inner `~` lists the excluded instruments. The model needs at least as many instruments as endogenous regressors.
 - `fe(unit_id)` and `fe(time_id)` absorb unit and time fixed effects.
 - Without the inner `(endogenous ~ instruments)` term, `reg` estimates OLS with the specified fixed effects.
-
 - The example below uses the panel generated above and estimates an OLS model with county and year fixed effects.
 
 ```{julia}
@@ -322,10 +320,18 @@ regtable(
 #| label: run-r-with-rcall
 using RCall
 
-julia_values = [1, 2, 3, 4]
-@rput julia_values
+R"""
+r_values <- c(1, 2, 3, 4)
+r_mean <- mean(r_values)
+""";
 
-r_mean = rcopy(R"mean(julia_values)")
+r_mean_with_rcopy = rcopy(R"r_mean")
+@rget r_mean
+
+(
+    with_rcopy = r_mean_with_rcopy,
+    with_rget = r_mean,
+)
 ```
 
 ## Difference-in-Differences
