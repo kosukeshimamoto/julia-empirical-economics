@@ -2,7 +2,7 @@
 title: "Julia for Empirical Economics"
 subtitle: |
   July 20 - August 6, 2026<br>
-  Mon, Tue, and Thu, 12:30pm - 2:55pm, Social Sciences 119  
+  Mon, Tue, and Thu, 12:30pm - 2:55pm, Social Sciences 105  
 author:
   - name: "Kosuke Shimamoto"
     affiliation: "Duke University"
