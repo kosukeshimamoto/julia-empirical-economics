@@ -11,6 +11,7 @@ project:
     - lectures/project_management.html
     - lectures/data_cleaning.html
     - lectures/reduced_form_analysis.html
+    - lectures/computational-techniques-optimization.html
     - assignments/inclass-assignment/day1-assignment.qmd
     - assignments/inclass-assignment/html/day1-assignment.html
     - assignments/weekly-assignment/weekly-assignment1.qmd

@@ -13,7 +13,7 @@
   - Data cleaning [&#91;HTML&#93;](/lectures/data_cleaning.html)
   - Reduced-form analysis [&#91;HTML&#93;](/lectures/reduced_form_analysis.html)
 - Day 5 (Tue, Jul 28)
-  - Computational techniques 1
+  - Computational techniques 1 [&#91;HTML&#93;](/lectures/computational-techniques-optimization.html)
 - Day 6 (Thu, Jul 30)
   - Computational techniques 2
   - Demo 1: DDC

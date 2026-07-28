@@ -1,0 +1,167 @@
+---
+title: "Day 5 In-class Assignment"
+engine: julia
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: true
+  eval: true
+  warning: false
+  message: false
+---
+
+::: {.callout-note}
+## Submission and grading
+
+- This assignment is graded based on effort. Edit this QMD file and submit it within 24 hours to receive full credit.
+- If you finish during class, you may leave, work on the weekly assignment, or do your own work.
+- Please do not hesitate to ask the instructor any questions.
+:::
+
+::: {.callout-note title="How to Complete This Assignment"}
+- Use `Optim.jl` in Question 1, implement value function iteration directly in Question 2, and use `JuMP.jl` in Question 3.
+- Report solver status and numerical diagnostics when requested. A reported solution is not sufficient by itself.
+:::
+
+```{julia}
+using Ipopt
+using JuMP
+using Optim
+using Plots
+```
+
+## Question 1: A stationary point is not necessarily a minimum
+
+Consider the objective
+
+$$
+Q(x)=(x^2-1)^2.
+$$
+
+The function has two global minima. Use the following implementation and the initial value $x_0=0$.
+
+```{julia}
+double_well_objective(parameters) = (parameters[1]^2 - 1)^2
+initial_parameters = [0.0]
+```
+
+1. Plot the objective over $x\in[-1.5,1.5]$.
+2. Minimize the objective with Newton's method. Report the convergence status, minimizer, and objective value.
+3. Repeat the minimization with the Nelder--Mead method from the same initial value.
+
+```{julia}
+
+```
+
+## Question 2: Value function iteration
+
+A household solves
+
+$$
+\max_{\{c_t,k_{t+1}\}_{t=0}^{\infty}}
+\sum_{t=0}^{\infty}\beta^t\log(c_t)
+$$
+
+subject to
+
+$$
+c_t+k_{t+1}
+=
+Ak_t^\alpha+(1-\delta)k_t,
+\qquad
+c_t>0.
+$$
+
+The Bellman equation is
+
+$$
+V(k)
+=
+\max_{k'\in\mathcal{K}}
+\left\{
+\log\left(Ak^\alpha+(1-\delta)k-k'\right)
++\beta V(k')
+\right\}.
+$$
+
+Use a discrete capital grid to approximate the choice of $k'$.
+
+```{julia}
+growth_parameters = (
+    discount_factor = 0.95,
+    capital_share = 0.30,
+    depreciation_rate = 0.08,
+    productivity = 1.0,
+)
+
+deterministic_steady_state(parameters) = (
+    parameters.capital_share * parameters.productivity /
+    (
+        1 / parameters.discount_factor - 1 +
+        parameters.depreciation_rate
+    )
+)^(1 / (1 - parameters.capital_share))
+
+steady_state_capital =
+    deterministic_steady_state(growth_parameters)
+capital_grid = collect(
+    range(
+        0.5steady_state_capital,
+        1.5steady_state_capital;
+        length = 200,
+    ),
+)
+```
+
+1. Write functions that compute available resources and utility. Return $-\infty$ when consumption is not positive.
+2. Write `bellman_operator`, which takes a value function, the capital grid, and the parameters and returns the updated value function and the policy indices.
+3. Write `solve_value_function`, which repeatedly applies the Bellman operator until the sup-norm difference is below $10^{-8}$. Print the iteration count and final error when it converges.
+4. Plot the value function and capital policy.
+
+```{julia}
+
+```
+
+## Question 3: Constrained optimization with JuMP
+
+A consumer chooses two goods according to
+
+$$
+\max_{x_1,x_2>0}
+\quad
+\gamma\log(x_1)+(1-\gamma)\log(x_2)
+$$
+
+subject to
+
+$$
+p_1x_1+p_2x_2\leq m.
+$$
+
+Use
+
+$$
+\gamma=0.4,
+\qquad
+p_1=2,
+\qquad
+p_2=1,
+\qquad
+m=10.
+$$
+
+The analytical solution is
+
+$$
+x_1^\ast=\frac{\gamma m}{p_1},
+\qquad
+x_2^\ast=\frac{(1-\gamma)m}{p_2}.
+$$
+
+Define and solve the problem with `JuMP.jl` and `Ipopt.jl`. Compare the numerical solution with the analytical solution.
+
+```{julia}
+
+```
