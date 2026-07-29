@@ -15,6 +15,7 @@ project:
     - assignments/inclass-assignment/day1-assignment.qmd
     - assignments/inclass-assignment/html/day1-assignment.html
     - assignments/weekly-assignment/weekly-assignment1.qmd
+    - assignments/weekly-assignment/weekly-assignment2.qmd
 
 website:
   title: "Empirical Economics with Julia"
