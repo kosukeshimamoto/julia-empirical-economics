@@ -1,0 +1,1130 @@
+---
+title: "Weekly Assignment 2: Dynamic Discrete Choice"
+engine: julia
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: true
+  eval: true
+  warning: false
+  message: false
+---
+
+::: {.callout-note}
+## General instructions
+
+- The details of each DGP, including its numerical parameters and distributions, are intentionally unspecified.
+  Choose them yourself, as you would in practice.
+- Choose nonzero true values for all parameters evaluated using the 5% relative-error criterion.
+- Grading criteria:
+  - If an objective-function plot is not minimized near the true parameters when identification is expected, half of the points for that part will be deducted.
+  - If an estimated parameter is not within 5% of its true value, half of the points for that part will be deducted.
+- The input and output examples below are illustrative only.
+- You may change them as needed to match your specification.
+:::
+
+## Setting
+
+- This exercise adapts the bus-engine replacement problem in
+  [Rust (1987)](https://doi.org/10.2307/1911259).
+- **Economic problem:** A bus operator decides whether to keep the current
+  engine or replace it.
+- **Engine condition:** $x_t\in\mathcal X$ records the condition of the engine.
+- **Action:** The operator chooses $a_t\in\{0,1\}$.
+  - $a_t=1$: keep the current engine.
+  - $a_t=0$: replace the engine.
+- **Timing:**
+  - The operator observes the engine condition.
+  - The choice-specific shocks $(\varepsilon_{0t},\varepsilon_{1t})$ are
+    realized.
+  - The operator chooses whether to keep or replace the engine.
+  - The next engine condition is drawn.
+- **Mean flow utility:** Let
+  $\theta_\pi\in\mathbb R^{d_\pi}$ denote the structural parameters that
+  determine the keep utility. Replacement is the reference action.
+
+  $$
+  \pi_1(x;\theta_\pi),
+  \qquad
+  \pi_0(x;\theta_\pi)=0.
+  $$
+
+- **Realized flow utility:**
+
+  $$
+  \pi_a(x;\theta_\pi)+\varepsilon_a,
+  $$
+
+  where the shocks are i.i.d. type-I extreme value across actions and periods.
+- **Transition probability:**
+
+  $$
+  G_a(x,x')
+  =
+  \Pr(x_{t+1}=x'\mid x_t=x,a_t=a).
+  $$
+
+  - $G_1$ is the keep transition matrix.
+  - $G_0$ is the replace transition matrix.
+- **Model choices:** Choose the state space $\mathcal X$, the dimension
+  $d_\pi$, the true parameter vector $\theta_{\pi,0}$, the discount factor
+  $\beta_0$, and the transition matrices.
+
+::: {.callout-warning}
+## Identification condition
+
+If $\beta$ is fixed, the number of utility parameters must satisfy
+
+$$
+d_\pi\le S(A-1),
+$$
+
+where $S$ is the number of states and $A$ is the number of actions.
+:::
+
+::: {.callout-note}
+## Transition probability
+
+In a standard dynamic discrete choice model, transition probabilities are also
+estimated from the data. For this exercise, assume that they are known to the
+analyst and treat them as fixed throughout the analysis.
+:::
+
+### Julia setup
+
+- **Load** the required packages.
+- **Choose** the state space and the structural parameterization of
+  $\pi_1(x;\theta_\pi)$.
+- **Choose** the true parameters and transition matrices.
+- **Define** `keep_utility_vector` to map $(\mathcal X,\theta_\pi)$ into one
+  mean keep utility for each state. The dimensions of $\mathcal X$ and
+  $\theta_\pi$ need not be equal. Return a vector of length $S$.
+
+```{julia}
+#| label: setup
+
+using DataFrames
+using LinearAlgebra
+using Optim
+using Plots
+using Random
+
+# Replace each `nothing` with your own choice.
+number_of_x_states = nothing
+x_states = collect(1:number_of_x_states)
+base_keep_transition = nothing
+base_replace_transition = nothing
+true_discount = nothing
+true_theta_pi = nothing
+
+function keep_utility_vector(states, theta_pi)
+    return keep_utility
+end
+
+# Example input and output
+example_keep_utility =
+    keep_utility_vector(x_states, true_theta_pi)
+example_keep_utility
+```
+
+## Overview of Sections 1–3
+
+The estimation exercise has three main steps:
+
+1. **Compute the true-model CCPs (Section 1).** Set the true parameters, solve
+   the value function, and compute the corresponding conditional choice
+   probabilities (CCPs).
+2. **Simulate data (Section 2).** Use the true CCPs and transition matrices to
+   simulate panel data and aggregate the observations by state.
+3. **Construct and estimate the structural model (Section 3).** Define the
+   Nested Fixed Point (NFXP) objective, inspect its shape on a parameter grid,
+   and estimate the parameters by numerical optimization.
+
+Section 2 generates the data. Section 3 treats those data as observed and
+constructs the estimator used to recover the structural parameters.
+
+## 1. Solve the DDC model
+
+### 1a. Define the choice-specific values
+
+- Given an ex-ante value vector $V$, the value of choosing action $a$ now and
+  behaving optimally afterward is
+
+  $$
+  v_a(x;V)
+  =
+  \pi_a(x;\theta_\pi)
+  +
+  \beta\sum_{x'}G_a(x,x')V(x').
+  $$
+
+- Let $\pi_1(\theta_\pi)$ collect the keep utilities across states. Because
+  replacement is the reference action,
+
+  $$
+  v_1(V)=\pi_1(\theta_\pi)+\beta G_1V,
+  \qquad
+  v_0(V)=\beta G_0V.
+  $$
+
+- **Define** `choice_specific_values` to return a named tuple with fields
+  `keep` and `replace`.
+
+```{julia}
+#| label: choice-specific-values
+
+function choice_specific_values(;
+    integrated_value,
+    keep_utility,
+    discount,
+    keep_transition,
+    replace_transition,
+)
+    return (
+        keep = keep_value,
+        replace = replace_value,
+    )
+end
+
+# Example input and output
+choice_specific_values(
+    integrated_value = zeros(number_of_x_states),
+    keep_utility = example_keep_utility,
+    discount = true_discount,
+    keep_transition = base_keep_transition,
+    replace_transition = base_replace_transition,
+)
+```
+
+### 1b. Define the Bellman operator
+
+- Under type-I extreme value shocks, and after normalizing the additive Euler
+  constant to zero, the Bellman operator is
+
+  $$
+  \Phi_\beta(V)(x)
+  =
+  \log\left[
+  \exp\{v_0(x;V)\}
+  +
+  \exp\{v_1(x;V)\}
+  \right].
+  $$
+
+- **Define** `logsumexp_pair` to return one scalar and `bellman_operator` to
+  return the updated value vector $\Phi_\beta(V)$.
+
+```{julia}
+#| label: logsumexp-helper
+
+function logsumexp_pair(first_value, second_value)
+    return logsumexp_value
+end
+
+# Example input and output
+logsumexp_pair(0.0, 1.0)
+```
+
+```{julia}
+#| label: bellman-operator
+
+function bellman_operator(;
+    integrated_value,
+    keep_utility,
+    discount,
+    keep_transition,
+    replace_transition,
+)
+    return updated_value
+end
+
+# Example input and output
+bellman_operator(
+    integrated_value = zeros(number_of_x_states),
+    keep_utility = example_keep_utility,
+    discount = true_discount,
+    keep_transition = base_keep_transition,
+    replace_transition = base_replace_transition,
+)
+```
+
+### 1c. Solve the fixed point
+
+- Starting from $V^{(0)}$, update
+
+  $$
+  V^{(r+1)}=\Phi_\beta(V^{(r)})
+  $$
+
+  until
+
+  $$
+  \max_x
+  \left|
+  V^{(r+1)}(x)-V^{(r)}(x)
+  \right|
+  <\lambda.
+  $$
+
+- **Define** `solve_ddc` to repeat the Bellman update until convergence. Return
+  the converged value vector, the number of iterations, and the final error.
+
+```{julia}
+#| label: ddc-solver
+
+function solve_ddc(;
+    keep_utility,
+    discount,
+    keep_transition,
+    replace_transition,
+    tolerance = 1e-12,
+    maximum_iterations = 20_000,
+)
+    return (
+        value = updated_value,
+        iterations = iteration,
+        error = error,
+    )
+end
+
+# Example input and output
+example_ddc_solution = solve_ddc(
+    keep_utility = example_keep_utility,
+    discount = true_discount,
+    keep_transition = base_keep_transition,
+    replace_transition = base_replace_transition,
+)
+example_ddc_solution
+```
+
+### 1d. Compute the conditional choice probabilities
+
+- The probability of keeping the engine is
+
+  $$
+  p_1(x;V)
+  =
+  \frac{1}
+  {1+\exp\{-[v_1(x;V)-v_0(x;V)]\}},
+  $$
+
+  and $p_0(x;V)=1-p_1(x;V)$.
+- **Define** `logistic` to return one probability and
+  `choice_probabilities` to return a named tuple with fields `keep` and
+  `replace`.
+
+```{julia}
+#| label: logistic-helper
+
+function logistic(value)
+    return probability
+end
+
+# Example input and output
+logistic(0.0)
+```
+
+```{julia}
+#| label: choice-probabilities
+
+function choice_probabilities(;
+    integrated_value,
+    keep_utility,
+    discount,
+    keep_transition,
+    replace_transition,
+)
+    return (
+        keep = keep_probability,
+        replace = replace_probability,
+    )
+end
+
+# Example input and output
+choice_probabilities(
+    integrated_value = example_ddc_solution.value,
+    keep_utility = example_keep_utility,
+    discount = true_discount,
+    keep_transition = base_keep_transition,
+    replace_transition = base_replace_transition,
+)
+```
+
+### 1e. Solve the true model
+
+- **Construct** the keep-utility vector from the chosen
+  $\theta_{\pi,0}$.
+- **Solve** the model at the chosen parameters and transition matrices.
+
+```{julia}
+#| label: solve-true-model
+
+true_keep_utility =
+    keep_utility_vector(x_states, true_theta_pi)
+true_solution = solve_ddc(
+    keep_utility = true_keep_utility,
+    discount = true_discount,
+    keep_transition = base_keep_transition,
+    replace_transition = base_replace_transition,
+)
+true_ccps = choice_probabilities(
+    integrated_value = true_solution.value,
+    keep_utility = true_keep_utility,
+    discount = true_discount,
+    keep_transition = base_keep_transition,
+    replace_transition = base_replace_transition,
+)
+
+DataFrame(
+    x = x_states,
+    keep_utility = true_keep_utility,
+    keep_probability = true_ccps.keep,
+)
+```
+
+```{julia}
+#| label: true-solver-diagnostics
+
+DataFrame(
+    iterations = true_solution.iterations,
+    final_error = true_solution.error,
+)
+```
+
+- **Check** that `final_error` is below the tolerance and that every CCP lies
+  strictly between zero and one.
+
+## 2. Simulate the data
+
+### 2a. Simulate choice data
+
+- The simulated data follow each decision maker for several periods. Each row
+  records the decision maker, period, state, and action.
+- Let $\mu_0$ denote the initial-state distribution:
+
+  $$
+  \mu_0(s)
+  =
+  \Pr(s_{i1}=s).
+  $$
+
+- **Use** the uniform initial-state distribution
+
+  $$
+  \mu_0(s)=\frac{1}{S}.
+  $$
+
+- For each decision maker $i$, **draw** the initial state:
+
+  $$
+  s_{i1}
+  \sim
+  \mu_0.
+  $$
+
+- In each period $t$, **draw** the action from the model CCP:
+
+  $$
+  a_{it}
+  \sim
+  \operatorname{Bernoulli}\{p_1(s_{it})\}.
+  $$
+
+- Then **draw** the next state using the transition matrix for the realized
+  action:
+
+  $$
+  s_{i,t+1}
+  \sim
+  G_{a_{it}}(s_{it},\cdot).
+  $$
+
+- **Define** `draw_state` to return one state index.
+- **Define** `simulate_choice_data` to repeat these steps across decision makers
+  and periods. Return a `DataFrame` with columns `decision_maker_id`, `period`,
+  `state`, and `action`.
+
+```{julia}
+#| label: simulate-choice-data
+
+function draw_state(rng, state_probability)
+    return state
+end
+
+function simulate_choice_data(;
+    rng,
+    keep_probability,
+    keep_transition,
+    replace_transition,
+    initial_state_probability,
+    number_of_decision_makers = 5_000,
+    number_of_periods = 30,
+)
+    return DataFrame(
+        decision_maker_id = decision_maker_id,
+        period = period,
+        state = state,
+        action = action,
+    )
+end
+
+# Example input and output
+example_rng = MersenneTwister(20260729)
+example_initial_state_probability =
+    fill(1 / number_of_x_states, number_of_x_states)
+example_initial_state =
+    draw_state(example_rng, example_initial_state_probability)
+example_choice_data = simulate_choice_data(
+    rng = example_rng,
+    keep_probability = true_ccps.keep,
+    keep_transition = base_keep_transition,
+    replace_transition = base_replace_transition,
+    initial_state_probability = example_initial_state_probability,
+    number_of_decision_makers = 3,
+    number_of_periods = 4,
+)
+(
+    initial_state = example_initial_state,
+    data = first(example_choice_data, 8),
+)
+
+base_rng = MersenneTwister(20260728)
+base_initial_state_probability =
+    fill(1 / number_of_x_states, number_of_x_states)
+choice_data = simulate_choice_data(
+    rng = base_rng,
+    keep_probability = true_ccps.keep,
+    keep_transition = base_keep_transition,
+    replace_transition = base_replace_transition,
+    initial_state_probability = base_initial_state_probability,
+)
+
+first(choice_data, 8)
+```
+
+### 2b. Aggregate the observed data
+
+- **Define** `aggregate_choice_data` to return a `DataFrame` with columns
+  `state`, `observations`, `keep`, and `replace`.
+
+```{julia}
+#| label: aggregate-choice-data
+
+function aggregate_choice_data(data)
+    return counts
+end
+
+# Example input and output
+example_choice_counts =
+    aggregate_choice_data(example_choice_data)
+example_choice_counts
+
+choice_counts = aggregate_choice_data(choice_data)
+```
+
+## 3. Construct and estimate the model
+
+### 3a. Define the NFXP objective
+
+- Rust (1987) proposes the Nested Fixed Point (NFXP) algorithm. It nests a
+  dynamic-programming problem inside likelihood optimization:
+  - **Inner loop:** For each candidate parameter vector, solve the Bellman fixed
+    point and compute the conditional choice probabilities (CCPs).
+  - **Outer loop:** Update the parameter vector to maximize the conditional
+    choice likelihood. The code below equivalently minimizes its negative.
+- Given candidate CCPs, use the average negative conditional log likelihood:
+
+  $$
+  Q
+  =
+  -\frac{1}{N}\sum_x
+  \left[
+  n_{1x}\log p_1(x)
+  +
+  n_{0x}\log\{1-p_1(x)\}
+  \right].
+  $$
+
+- **Define** `negative_log_likelihood` to return the scalar $Q$.
+
+```{julia}
+#| label: negative-log-likelihood
+
+function negative_log_likelihood(;
+    keep_probability,
+    counts,
+)
+    return objective_value
+end
+
+# Example input and output
+negative_log_likelihood(
+    keep_probability = true_ccps.keep,
+    counts = choice_counts,
+)
+```
+
+- For each trial structural parameter vector $\theta_\pi$, **construct** the
+  implied keep utilities, **solve** the DDC model, **compute** its CCPs, and
+  **evaluate** the average negative log likelihood:
+
+  $$
+  \mathcal{L}(\theta_\pi;\beta)
+  =
+  Q\bigl(p_1(\theta_\pi,\beta)\bigr).
+  $$
+
+- **Define** `nfxp_objective` to solve the model, compute its CCPs, and
+  evaluate the likelihood after the implied keep-utility vector has been
+  constructed. Return the scalar objective value.
+
+```{julia}
+#| label: nfxp-objective
+
+function nfxp_objective(;
+    keep_utility,
+    discount,
+    counts,
+    keep_transition,
+    replace_transition,
+)
+    return objective_value
+end
+
+# Example input and output
+nfxp_objective(
+    keep_utility = true_keep_utility,
+    discount = true_discount,
+    counts = choice_counts,
+    keep_transition = base_keep_transition,
+    replace_transition = base_replace_transition,
+)
+```
+
+### 3b. Plot the objective on a grid
+
+- **Construct** a nine-point grid for each component of $\theta_\pi$.
+- **Evaluate** the sample objective at every point in the Cartesian product of
+  parameter grids.
+- For a panel displaying $(\theta_j,\theta_k)$, **take** the smallest objective
+  among all full-grid points with those two coordinates:
+
+  $$
+  \widetilde{\mathcal{L}}_{jk}(a,b)
+  =
+  \min_{\theta_{-(j,k)}\in\mathcal G_{-(j,k)}}
+  \mathcal{L}(a,b,\theta_{-(j,k)}).
+  $$
+
+- **Define** `evaluate_objective_grid` to return the full objective array.
+- **Define** `project_objective_grid` to return a named tuple with fields
+  `first_grid`, `second_grid`, `projected_objective`, and
+  `relative_objective`.
+- **Define** `plot_projected_surfaces` to return the combined plot.
+
+```{julia}
+#| label: grid-projection-functions
+
+function evaluate_objective_grid(;
+    parameter_grids,
+    objective,
+)
+    return objective_grid
+end
+
+function project_objective_grid(;
+    parameter_pair,
+    parameter_grids,
+    objective_grid,
+)
+    return (
+        first_grid = first_grid,
+        second_grid = second_grid,
+        projected_objective = projected_objective,
+        relative_objective = relative_objective,
+    )
+end
+
+function plot_projected_surfaces(;
+    parameter_pairs,
+    surfaces,
+    true_parameters,
+    parameter_labels,
+    layout,
+    figure_size,
+)
+    return combined_plot
+end
+
+# Example input and output
+example_parameter_grids = [
+    collect(range(-1.0, 1.0; length = 3)),
+    collect(range(-1.0, 1.0; length = 3)),
+]
+example_objective =
+    parameters -> sum(abs2, parameters)
+example_objective_grid = evaluate_objective_grid(
+    parameter_grids = example_parameter_grids,
+    objective = example_objective,
+)
+example_surface = project_objective_grid(
+    parameter_pair = (1, 2),
+    parameter_grids = example_parameter_grids,
+    objective_grid = example_objective_grid,
+)
+plot_projected_surfaces(
+    parameter_pairs = [(1, 2)],
+    surfaces = [example_surface],
+    true_parameters = [0.0, 0.0],
+    parameter_labels = ["θ₁", "θ₂"],
+    layout = (1, 1),
+    figure_size = (420, 360),
+)
+```
+
+- With $\beta=\beta_0$ fixed, **construct** all
+  $\binom{d_\pi}{2}$ unique pairs of structural parameters.
+- **Plot** the projected objective for every pair.
+
+```{julia}
+#| label: fixed-discount-pairwise-projections
+#| fig-cap: "Pairwise projections of the nine-point utility grid with the discount factor fixed. Darker colors indicate a smaller log relative objective."
+
+number_of_utility_parameters = length(true_theta_pi)
+utility_parameter_pairs = [
+    (first_parameter, second_parameter)
+    for first_parameter in 1:(number_of_utility_parameters - 1)
+    for second_parameter in (first_parameter + 1):number_of_utility_parameters
+]
+utility_parameter_labels = [
+    "θπ[$parameter]"
+    for parameter in 1:number_of_utility_parameters
+]
+utility_parameter_grids = [
+    collect(range(value - 0.25, value + 0.25; length = 9))
+    for value in true_theta_pi
+]
+
+function fixed_discount_objective(utility_parameters)
+    return objective_value
+end
+
+# Example input and output
+fixed_discount_objective(true_theta_pi)
+
+fixed_discount_objective_grid = evaluate_objective_grid(
+    parameter_grids = utility_parameter_grids,
+    objective = fixed_discount_objective,
+)
+fixed_discount_surfaces = [
+    project_objective_grid(
+        parameter_pair = pair,
+        parameter_grids = utility_parameter_grids,
+        objective_grid = fixed_discount_objective_grid,
+    ) for pair in utility_parameter_pairs
+]
+
+plot_projected_surfaces(
+    parameter_pairs = utility_parameter_pairs,
+    surfaces = fixed_discount_surfaces,
+    true_parameters = true_theta_pi,
+    parameter_labels = utility_parameter_labels,
+    layout = (
+        cld(length(utility_parameter_pairs), 3),
+        min(length(utility_parameter_pairs), 3),
+    ),
+    figure_size = (
+        350 * min(length(utility_parameter_pairs), 3),
+        330 * cld(length(utility_parameter_pairs), 3),
+    ),
+)
+```
+
+- **Check** whether the low-objective region localizes around the true
+  parameter vector when $\beta$ is fixed.
+
+### 3c. Estimate the model
+
+- With $\beta=\beta_0$ fixed, **estimate**
+
+  $$
+  \widehat\theta_\pi
+  =
+  \operatorname*{arg\,min}_{\theta_\pi}
+  \mathcal{L}(\theta_\pi;\beta_0).
+  $$
+
+- **Compare** the estimates with the values used in the true model.
+
+```{julia}
+#| label: fixed-discount-estimation
+
+fixed_discount_fit = optimize(
+    fixed_discount_objective,
+    zeros(number_of_utility_parameters),
+    NelderMead(),
+    Optim.Options(
+        iterations = 5_000,
+        show_trace = false,
+    ),
+)
+estimated_theta_pi = Optim.minimizer(fixed_discount_fit)
+
+DataFrame(
+    parameter = utility_parameter_labels,
+    true_value = true_theta_pi,
+    estimated_value = estimated_theta_pi,
+    estimation_error = estimated_theta_pi - true_theta_pi,
+)
+```
+
+```{julia}
+#| label: fixed-discount-diagnostics
+
+DataFrame(
+    converged = Optim.converged(fixed_discount_fit),
+    maximum_absolute_error =
+        maximum(abs.(estimated_theta_pi - true_theta_pi)),
+)
+```
+
+## 4. Release the fixed-discount constraint
+
+- Rust (1987) reports estimates at fixed discount factors rather than estimating
+  $\beta$ jointly with the payoff parameters. Releasing the fixed-discount
+  constraint produces the parameter vector
+
+  $$
+  \theta=(\beta,\theta_\pi')'
+  \in
+  \mathbb R^{1+d_\pi}.
+  $$
+
+- The necessary order condition may hold or fail, depending on the chosen
+  $d_\pi$. Even when it holds, it does not guarantee point identification of
+  $\beta$.
+- **Evaluate** a nine-point grid for every component of $\theta$.
+- **Project** the sample objective grid onto every unique parameter pair.
+- **Check** whether the objective has a flat direction, multiple minima, or one
+  localized minimum.
+
+```{julia}
+#| label: free-discount-pairwise-projections
+#| fig-cap: "Pairwise projections of the sample objective after releasing the fixed-discount constraint."
+
+number_of_free_parameters = 1 + number_of_utility_parameters
+free_parameter_pairs = [
+    (first_parameter, second_parameter)
+    for first_parameter in 1:(number_of_free_parameters - 1)
+    for second_parameter in (first_parameter + 1):number_of_free_parameters
+]
+free_parameter_labels = vcat(["β"], utility_parameter_labels)
+true_free_parameters = [
+    true_discount,
+    true_theta_pi...,
+]
+free_parameter_grids = [
+    collect(range(
+        max(0.01, true_discount - 0.12),
+        min(0.99, true_discount + 0.12);
+        length = 9,
+    )),
+    utility_parameter_grids...,
+]
+
+function free_discount_objective(parameters)
+    return objective_value
+end
+
+# Example input and output
+free_discount_objective(true_free_parameters)
+
+base_free_objective_grid = evaluate_objective_grid(
+    parameter_grids = free_parameter_grids,
+    objective = free_discount_objective,
+)
+base_free_surfaces = [
+    project_objective_grid(
+        parameter_pair = pair,
+        parameter_grids = free_parameter_grids,
+        objective_grid = base_free_objective_grid,
+    ) for pair in free_parameter_pairs
+]
+
+plot_projected_surfaces(
+    parameter_pairs = free_parameter_pairs,
+    surfaces = base_free_surfaces,
+    true_parameters = true_free_parameters,
+    parameter_labels = free_parameter_labels,
+    layout = (
+        cld(length(free_parameter_pairs), 3),
+        min(length(free_parameter_pairs), 3),
+    ),
+    figure_size = (
+        400 * min(length(free_parameter_pairs), 3),
+        360 * cld(length(free_parameter_pairs), 3),
+    ),
+)
+```
+
+- **Describe** the shape of the low-objective region. Passing the order
+  condition alone is not evidence that $\beta$ is point identified.
+
+## 5. Add an excluded state variable
+
+- [Abbring and Daljord (2020)](https://bpb-us-w2.wpmucdn.com/voices.uchicago.edu/dist/9/2274/files/2019/12/ddc4.pdf)
+  show that an exclusion restriction on current utility yields a moment
+  condition for $\beta$. The resulting identified set is finite but need not
+  be a singleton.
+- Additional exclusion restrictions can further narrow the identified set.
+- **Add** an excluded state variable and **check** how the objective changes
+  relative to Section 4.
+
+### 5a. Define the new state
+
+- **Add** the exogenous state $z_t\in\mathcal Z$.
+- The complete state is now $s_t=(x_t,z_t)$.
+- The exogenous state affects future deterioration but not current flow
+  utility:
+
+  $$
+  \pi_1(x,z)
+  =
+  \pi_1(x;\theta_\pi)
+  \qquad
+  \text{for every }z\in\mathcal Z.
+  $$
+
+- The transition probability is
+
+  $$
+  G_a\bigl((x,z),(x',z')\bigr)
+  =
+  \Pr(x_{t+1}=x',z_{t+1}=z'\mid x_t=x,z_t=z,a_t=a).
+  $$
+
+- **Choose** transitions for $z$ and $z$-specific transitions for $x$.
+- **Define** `joint_transition` to construct the expanded transition matrices.
+
+```{julia}
+#| label: excluded-state-transitions
+
+number_of_z_states = nothing
+
+function state_index(x, z, number_of_x_states)
+    return index
+end
+
+z_transition = nothing
+keep_transition_by_z = nothing
+replace_transition_by_z = nothing
+
+function joint_transition(;
+    transition_by_z,
+    z_transition,
+    number_of_x_states,
+    number_of_z_states,
+)
+    return transition
+end
+
+excluded_keep_transition = joint_transition(
+    transition_by_z = keep_transition_by_z,
+    z_transition = z_transition,
+    number_of_x_states = number_of_x_states,
+    number_of_z_states = number_of_z_states,
+)
+excluded_replace_transition = joint_transition(
+    transition_by_z = replace_transition_by_z,
+    z_transition = z_transition,
+    number_of_x_states = number_of_x_states,
+    number_of_z_states = number_of_z_states,
+)
+
+# Example input and output
+(
+    first_state_index =
+        state_index(1, 1, number_of_x_states),
+    keep_transition_size =
+        size(excluded_keep_transition),
+    replace_transition_size =
+        size(excluded_replace_transition),
+)
+```
+
+### 5b. Solve the expanded model
+
+- **Repeat** each utility once for each value of $z$.
+- **Solve** the expanded true model, **simulate** observation-level data, and
+  **aggregate** the data for estimation.
+
+```{julia}
+#| label: solve-excluded-state-model
+
+excluded_keep_utility =
+    repeat(true_keep_utility, outer = number_of_z_states)
+excluded_solution = solve_ddc(
+    keep_utility = excluded_keep_utility,
+    discount = true_discount,
+    keep_transition = excluded_keep_transition,
+    replace_transition = excluded_replace_transition,
+)
+excluded_ccps = choice_probabilities(
+    integrated_value = excluded_solution.value,
+    keep_utility = excluded_keep_utility,
+    discount = true_discount,
+    keep_transition = excluded_keep_transition,
+    replace_transition = excluded_replace_transition,
+)
+
+DataFrame(
+    x = repeat(x_states, outer = number_of_z_states),
+    z = repeat(
+        1:number_of_z_states;
+        inner = number_of_x_states,
+    ),
+    keep_utility = excluded_keep_utility,
+    keep_probability = excluded_ccps.keep,
+)
+```
+
+```{julia}
+#| label: simulate-excluded-state-data
+
+excluded_rng = MersenneTwister(20260729)
+excluded_initial_state_probability =
+    fill(
+        1 / (number_of_x_states * number_of_z_states),
+        number_of_x_states * number_of_z_states,
+    )
+excluded_choice_data = simulate_choice_data(
+    rng = excluded_rng,
+    keep_probability = excluded_ccps.keep,
+    keep_transition = excluded_keep_transition,
+    replace_transition = excluded_replace_transition,
+    initial_state_probability = excluded_initial_state_probability,
+)
+excluded_counts = aggregate_choice_data(excluded_choice_data)
+
+first(excluded_choice_data, 8)
+```
+
+- The new state creates variation in CCPs across $z$ even though current
+  utility does not depend on $z$.
+
+### 5c. Plot the same parameter pairs
+
+- The parameter vector remains
+
+  $$
+  \theta=(\beta,\theta_\pi')',
+  $$
+
+  but the expanded state space provides additional CCPs without adding payoff
+  parameters.
+- **Use** the same parameter pairs, grids, plotting scale, and projection
+  procedure as in Section 4.
+
+```{julia}
+#| label: excluded-state-pairwise-projections
+#| fig-cap: "Pairwise projections of the sample objective after adding the excluded state."
+
+function excluded_state_objective(parameters)
+    return objective_value
+end
+
+# Example input and output
+excluded_state_objective(true_free_parameters)
+
+excluded_state_objective_grid = evaluate_objective_grid(
+    parameter_grids = free_parameter_grids,
+    objective = excluded_state_objective,
+)
+excluded_state_surfaces = [
+    project_objective_grid(
+        parameter_pair = pair,
+        parameter_grids = free_parameter_grids,
+        objective_grid = excluded_state_objective_grid,
+    ) for pair in free_parameter_pairs
+]
+
+plot_projected_surfaces(
+    parameter_pairs = free_parameter_pairs,
+    surfaces = excluded_state_surfaces,
+    true_parameters = true_free_parameters,
+    parameter_labels = free_parameter_labels,
+    layout = (
+        cld(length(free_parameter_pairs), 3),
+        min(length(free_parameter_pairs), 3),
+    ),
+    figure_size = (
+        400 * min(length(free_parameter_pairs), 3),
+        360 * cld(length(free_parameter_pairs), 3),
+    ),
+)
+```
+
+- **Check** whether the low-objective region is more tightly localized than in
+  Section 4.
+
+### 5d. Estimate the expanded model
+
+- **Use** the best full-grid point as the initial value.
+- **Estimate** $(\beta,\theta_\pi')'$ jointly under the bounds covered by the
+  grids.
+- **Compare** the estimates with the values used in the true model.
+
+```{julia}
+#| label: excluded-state-estimation
+
+best_grid_index = argmin(excluded_state_objective_grid)
+initial_parameters = [
+    free_parameter_grids[parameter][best_grid_index[parameter]]
+    for parameter in eachindex(free_parameter_grids)
+]
+lower_bounds = first.(free_parameter_grids)
+upper_bounds = last.(free_parameter_grids)
+
+excluded_state_fit = optimize(
+    excluded_state_objective,
+    lower_bounds,
+    upper_bounds,
+    initial_parameters,
+    Fminbox(LBFGS()),
+    Optim.Options(
+        iterations = 1_000,
+        show_trace = false,
+    ),
+)
+estimated_parameters = Optim.minimizer(excluded_state_fit)
+
+DataFrame(
+    parameter = free_parameter_labels,
+    true_value = true_free_parameters,
+    estimated_value = estimated_parameters,
+    estimation_error =
+        estimated_parameters - true_free_parameters,
+)
+```
+
+```{julia}
+#| label: excluded-state-estimation-diagnostics
+
+DataFrame(
+    converged = Optim.converged(excluded_state_fit),
+    maximum_absolute_error =
+        maximum(abs.(estimated_parameters - true_free_parameters)),
+)
+```
+
+::: {.callout-important}
+- Section 3 fixes $\beta$, plots the sample objective, and estimates
+  $\theta_\pi$.
+- Section 4 releases $\beta$ and examines its identified set without an
+  exclusion restriction.
+- Section 5 adds exclusion restrictions that shift expected future utility but
+  not current utility. Use the objective plots and estimates to assess how
+  sharply the chosen DGP identifies $(\beta,\theta_\pi')'$.
+:::
