@@ -15,8 +15,9 @@
 - Day 5 (Tue, Jul 28)
   - Computational techniques 1 [&#91;HTML&#93;](/lectures/computational-techniques-optimization.html)
 - Day 6 (Thu, Jul 30)
-  - Computational techniques 2
-  - Demo 1: DDC
+  - Computational techniques 2 [&#91;HTML&#93;](/lectures/computational-techniques-2.html)
+  - Demo 1: DDC [&#91;HTML&#93;](/lectures/demo_ddc.html)
+  - In-class Assignment [&#91;qmd&#93;](/assignments/inclass-assignment/day6-assignment.qmd) [&#91;HTML&#93;](/assignments/inclass-assignment/html/day6-assignment.html)
 - Day 7 (Mon, Aug 3)
   - Numerical methods in economics 1
   - Demo 2: BLP
