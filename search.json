@@ -1,5 +1,54 @@
 [
   {
+    "objectID": "assignments/final-project-description.html",
+    "href": "assignments/final-project-description.html",
+    "title": "Final Project: Monte Carlo Study",
+    "section": "",
+    "text": "The final project is to implement a complete Monte Carlo study.\nBase the study on either your own research project or a paper of your choice.\n\nA well-cited, relatively recent paper is sufficient.\nA paper with publicly available replication code is even better.\nLet me know if you have difficulty finding a suitable paper.\n\nPlease briefly describe your plan in a GitHub issue and assign the issue to me.\nThe final project is due on August 23 at 23:59.\nSubmit a PDF typeset in LaTeX and the accompanying Julia code.\nThe required contents are provided below.\n\nI know the exact structure may vary with your setting. But the point is it’s important to show the intermediate outputs for validation, not just showing that you recover true parameters."
+  },
+  {
+    "objectID": "assignments/final-project-description.html#overview",
+    "href": "assignments/final-project-description.html#overview",
+    "title": "Final Project: Monte Carlo Study",
+    "section": "",
+    "text": "The final project is to implement a complete Monte Carlo study.\nBase the study on either your own research project or a paper of your choice.\n\nA well-cited, relatively recent paper is sufficient.\nA paper with publicly available replication code is even better.\nLet me know if you have difficulty finding a suitable paper.\n\nPlease briefly describe your plan in a GitHub issue and assign the issue to me.\nThe final project is due on August 23 at 23:59.\nSubmit a PDF typeset in LaTeX and the accompanying Julia code.\nThe required contents are provided below.\n\nI know the exact structure may vary with your setting. But the point is it’s important to show the intermediate outputs for validation, not just showing that you recover true parameters."
+  },
+  {
+    "objectID": "assignments/final-project-description.html#required-contents",
+    "href": "assignments/final-project-description.html#required-contents",
+    "title": "Final Project: Monte Carlo Study",
+    "section": "Required Contents",
+    "text": "Required Contents\n\nGoal\n\nBriefly state the goal of your Monte Carlo study. It does not need to be detailed.\nFor example, “I want to implement this method correctly” or “I want to conduct this counterfactual experiment” is sufficient.\n\n\n\nSetting and Data-Generating Process\n\nDescribe the setting and data-generating process (DGP) in enough detail for readers who are unfamiliar with the paper.\n\n\n\nIdentification\n\nReport the point- or set-identified parameter values implied by the identification conditions.\nIf the parameter is point identified, the recovered value should be within 1% of the true value.\nIf the parameter is set identified, a visual presentation of the identified set is preferred.\nYou may omit this section if identification analysis does not apply to your setting.\n\n\n\nSummary Statistics\n\nReport summary statistics for the simulated datasets.\n\n\n\nEstimation\n\nShow how the objective function behaves near the true parameter values.\nReport the estimates. Their mean should be within 5% of the true value.\nInference is optional, but I encourage you to try it.\n\n\n\nCounterfactual Analysis\n\nConsider one or two interesting counterfactual scenarios and summarize their implications.\nInference for the counterfactual results is optional."
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "Julia for Empirical Economics",
+    "section": "",
+    "text": "This module offers the opportunity to learn Julia programming and practical skills for economics research, especially computationally intensive work such as structural estimation."
+  },
+  {
+    "objectID": "index.html#lecture-schedule",
+    "href": "index.html#lecture-schedule",
+    "title": "Julia for Empirical Economics",
+    "section": "Lecture Schedule",
+    "text": "Lecture Schedule\n\nDay 1 (Mon, Jul 20)\n\nCourse introduction [PDF]\nJulia basics [HTML]\nIn-class Assignment [qmd] [HTML]\n\nDay 2 (Tue, Jul 21)\n\nHigh performance tips [HTML]\nCoding with AI [HTML]\nIn-class Assignment [qmd] [HTML]\n\nDay 3 (Thu, Jul 23)\n\nGit [HTML]\nProject management [HTML]\n\nDay 4 (Mon, Jul 27)\n\nData cleaning [HTML]\nReduced-form analysis [HTML]\n\nDay 5 (Tue, Jul 28)\n\nComputational techniques 1 [HTML]\n\nDay 6 (Thu, Jul 30)\n\nComputational techniques 2 [HTML]\nDemo 1: DDC [HTML]\nIn-class Assignment [qmd] [HTML]\n\nDay 7 (Mon, Aug 3)\n\nNumerical methods in economics 1\nDemo 2: BLP\n\nDay 8 (Tue, Aug 4)\n\nNumerical methods in economics 2\nDemo 3: TBA\n\nDay 9 (Thu, Aug 6)\n\nComputer cluster\nDemo 4: final project"
+  },
+  {
+    "objectID": "index.html#assignments",
+    "href": "index.html#assignments",
+    "title": "Julia for Empirical Economics",
+    "section": "Assignments",
+    "text": "Assignments\n\nHW1: Jul 26, 23:59\nHW2: Aug 5, 23:59\nHW3: Aug 12, 23:59"
+  },
+  {
+    "objectID": "index.html#final-project",
+    "href": "index.html#final-project",
+    "title": "Julia for Empirical Economics",
+    "section": "Final Project",
+    "text": "Final Project\n\nDescription"
+  },
+  {
     "objectID": "syllabus.html",
     "href": "syllabus.html",
     "title": "Julia for Empirical Economics",
@@ -33,33 +82,5 @@
     "title": "Julia for Empirical Economics",
     "section": "Grading and Assignments",
     "text": "Grading and Assignments\nYour course grade will depend on three components:\n\nIn-class assignments (30%): There will be one in-class assignment for each class. You need to submit it within 24 hours after the class ends. The grade is on a binary scale and is evaluated by effort. If you write at least one line of code, you will receive full credit. You receive full credit for this component if you correctly submit 7 of the 9 assignments, so you may miss 2 assignments.\nThree coding homework assignments (40%): You will be assigned weekly assignments during this class. The grades are evaluated by correctness. Each student must submit their own answer. All assignments are equally weighted.\nFinal project (30%): You will be asked to complete a Monte Carlo simulation as the final project. The final project should be based on 1) your own work, 2) a paper you like, or 3) papers I suggest. More details are documented in a separate file.\n\n\nDue\n\nHW1: Jul 26, 23:59\nHW2: Aug 2, 23:59\nHW3: Aug 9, 23:59\nFinal Project: Aug 23, 23:59\n\nRequirements\n\nAll code must be written in Julia. You may call other languages from Julia if necessary.\nYou must submit your code and its outputs.\nYou can submit outputs in any format, such as PDF, HTML, or Word, except for the final project. The final project should be submitted as a PDF typeset in LaTeX because this is the format commonly expected for our research.\nI recommend submitting homework as HTML files compiled from Quarto, because Quarto integrates well with Julia and is easy to write in.\nBefore I introduce Git and GitHub, you will submit assignments via Canvas. After we learn GitHub, you must submit them via GitHub."
-  },
-  {
-    "objectID": "index.html",
-    "href": "index.html",
-    "title": "Julia for Empirical Economics",
-    "section": "",
-    "text": "This module offers the opportunity to learn Julia programming and practical skills for economics research, especially computationally intensive work such as structural estimation."
-  },
-  {
-    "objectID": "index.html#lecture-schedule",
-    "href": "index.html#lecture-schedule",
-    "title": "Julia for Empirical Economics",
-    "section": "Lecture Schedule",
-    "text": "Lecture Schedule\n\nDay 1 (Mon, Jul 20)\n\nCourse introduction [PDF]\nJulia basics [HTML]\nIn-class Assignment [qmd] [HTML]\n\nDay 2 (Tue, Jul 21)\n\nHigh performance tips [HTML]\nCoding with AI [HTML]\nIn-class Assignment [qmd] [HTML]\n\nDay 3 (Thu, Jul 23)\n\nGit [HTML]\nProject management [HTML]\n\nDay 4 (Mon, Jul 27)\n\nData cleaning [HTML]\nReduced-form analysis [HTML]\n\nDay 5 (Tue, Jul 28)\n\nComputational techniques 1 [HTML]\n\nDay 6 (Thu, Jul 30)\n\nComputational techniques 2 [HTML]\nDemo 1: DDC [HTML]\nIn-class Assignment [qmd] [HTML]\n\nDay 7 (Mon, Aug 3)\n\nNumerical methods in economics 1\nDemo 2: BLP\n\nDay 8 (Tue, Aug 4)\n\nNumerical methods in economics 2\nDemo 3: TBA\n\nDay 9 (Thu, Aug 6)\n\nComputer cluster\nDemo 4: final project"
-  },
-  {
-    "objectID": "index.html#assignments",
-    "href": "index.html#assignments",
-    "title": "Julia for Empirical Economics",
-    "section": "Assignments",
-    "text": "Assignments\n\nHW1: Jul 26, 23:59\nHW2: Aug 5, 23:59\nHW3: Aug 12, 23:59"
-  },
-  {
-    "objectID": "index.html#final-project",
-    "href": "index.html#final-project",
-    "title": "Julia for Empirical Economics",
-    "section": "Final Project",
-    "text": "Final Project\n\nTBA"
   }
 ]
