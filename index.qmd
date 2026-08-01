@@ -37,4 +37,4 @@ This module offers the opportunity to learn Julia programming and practical skil
 
 ## Final Project
 
-- TBA 
+- [Description](/assignments/final-project-description.qmd)

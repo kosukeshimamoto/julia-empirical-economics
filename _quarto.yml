@@ -4,6 +4,7 @@ project:
   render:
     - index.qmd
     - syllabus.qmd
+    - assignments/final-project-description.qmd
   resources:
     - lectures/course_intro.pdf
     - lectures/julia_basics.html

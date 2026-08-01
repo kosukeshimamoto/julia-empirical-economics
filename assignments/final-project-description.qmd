@@ -1,0 +1,53 @@
+---
+title: "Final Project: Monte Carlo Study"
+format:
+  html:
+    toc: true
+    embed-resources: true
+---
+
+## Overview
+
+- The final project is to implement a complete Monte Carlo study.
+- Base the study on either your own research project or a paper of your choice.
+    - A well-cited, relatively recent paper is sufficient.
+    - A paper with publicly available replication code is even better.
+    - Let me know if you have difficulty finding a suitable paper.
+- Please briefly describe your plan in a GitHub issue and assign the issue to me.
+- The final project is due on August 23 at 23:59.
+- Submit a PDF typeset in LaTeX and the accompanying Julia code.
+- The required contents are provided below.
+    - I know the exact structure may vary with your setting. But the point is it's important to show the intermediate outputs for validation, not just showing that you recover true parameters.
+
+## Required Contents
+
+### Goal
+
+- Briefly state the goal of your Monte Carlo study. It does not need to be detailed.
+- For example, "I want to implement this method correctly" or "I want to conduct this counterfactual experiment" is sufficient.
+
+### Setting and Data-Generating Process
+
+- Describe the setting and data-generating process (DGP) in enough detail for readers who are unfamiliar with the paper.
+
+### Identification
+
+- Report the point- or set-identified parameter values implied by the identification conditions.
+- If the parameter is point identified, the recovered value should be within 1% of the true value.
+- If the parameter is set identified, a visual presentation of the identified set is preferred.
+- You may omit this section if identification analysis does not apply to your setting.
+
+### Summary Statistics
+
+- Report summary statistics for the simulated datasets.
+
+### Estimation
+
+- Show how the objective function behaves near the true parameter values.
+- Report the estimates. Their mean should be within 5% of the true value.
+- Inference is optional, but I encourage you to try it.
+
+### Counterfactual Analysis
+
+- Consider one or two interesting counterfactual scenarios and summarize their implications.
+- Inference for the counterfactual results is optional.
