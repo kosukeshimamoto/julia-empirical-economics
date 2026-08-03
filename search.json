@@ -32,7 +32,7 @@
     "href": "index.html#lecture-schedule",
     "title": "Julia for Empirical Economics",
     "section": "Lecture Schedule",
-    "text": "Lecture Schedule\n\nDay 1 (Mon, Jul 20)\n\nCourse introduction [PDF]\nJulia basics [HTML]\nIn-class Assignment [qmd] [HTML]\n\nDay 2 (Tue, Jul 21)\n\nHigh performance tips [HTML]\nCoding with AI [HTML]\nIn-class Assignment [qmd] [HTML]\n\nDay 3 (Thu, Jul 23)\n\nGit [HTML]\nProject management [HTML]\n\nDay 4 (Mon, Jul 27)\n\nData cleaning [HTML]\nReduced-form analysis [HTML]\n\nDay 5 (Tue, Jul 28)\n\nComputational techniques 1 [HTML]\n\nDay 6 (Thu, Jul 30)\n\nComputational techniques 2 [HTML]\nDemo 1: DDC [HTML]\nIn-class Assignment [qmd] [HTML]\n\nDay 7 (Mon, Aug 3)\n\nNumerical methods in economics 1\nDemo 2: BLP\n\nDay 8 (Tue, Aug 4)\n\nNumerical methods in economics 2\nDemo 3: TBA\n\nDay 9 (Thu, Aug 6)\n\nComputer cluster\nDemo 4: final project"
+    "text": "Lecture Schedule\n\nDay 1 (Mon, Jul 20)\n\nCourse introduction [PDF]\nJulia basics [HTML]\nIn-class Assignment [qmd] [HTML]\n\nDay 2 (Tue, Jul 21)\n\nHigh performance tips [HTML]\nCoding with AI [HTML]\nIn-class Assignment [qmd] [HTML]\n\nDay 3 (Thu, Jul 23)\n\nGit [HTML]\nProject management [HTML]\n\nDay 4 (Mon, Jul 27)\n\nData cleaning [HTML]\nReduced-form analysis [HTML]\n\nDay 5 (Tue, Jul 28)\n\nComputational techniques 1 [HTML]\n\nDay 6 (Thu, Jul 30)\n\nComputational techniques 2 [HTML]\nDemo 1: DDC [HTML]\nIn-class Assignment [qmd] [HTML]\n\nDay 7 (Mon, Aug 3)\n\nMonte Carlo Simulation for Structural Estimation [HTML]\nIn-class Assignment: BLP [qmd] [HTML]\n\nDay 8 (Tue, Aug 4)\n\nNumerical methods in economics 2\nDemo 3: TBA\n\nDay 9 (Thu, Aug 6)\n\nComputer cluster\nDemo 4: final project"
   },
   {
     "objectID": "index.html#assignments",
