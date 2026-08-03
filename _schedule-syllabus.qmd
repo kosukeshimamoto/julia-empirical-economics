@@ -16,8 +16,8 @@
   - Computational techniques 2
   - Demo 1: DDC
 - Day 7 (Mon, Aug 3)
-  - Numerical methods in economics 1
-  - Demo 2: BLP
+  - Monte Carlo Simulation for Structural Estimation
+  - In-class assignment: BLP
 - Day 8 (Tue, Aug 4)
   - Numerical methods in economics 2
   - Demo 3: TBA

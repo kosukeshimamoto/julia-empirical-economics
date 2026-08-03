@@ -1,0 +1,2368 @@
+---
+title: "Monte Carlo Simulation for Structural Estimation"
+format:
+  html:
+    toc: true
+    embed-resources: true
+engine: julia
+julia:
+  exeflags: ["--startup-file=no"]
+execute:
+  echo: true
+  warning: false
+fig-width: 7
+fig-height: 4
+---
+
+## Big Picture
+
+- First, set the goal of the Monte Carlo simulation.
+- The procedure depends on the goal, but many applications follow a similar workflow.
+
+1. Choose the DGP and experimental design.
+2. Solve the model.
+3. Analyze identification in the population.
+4. Generate data and check descriptive statistics.
+5. Estimate the model.
+6. Conduct inference.
+7. Run a counterfactual analysis.
+
+- This note discusses strategies for each step.
+
+## Running Example: A Two-Firm Entry Model Based on Ciliberto and Tamer (2009)
+
+- This note uses a two-firm teaching model based on the logic in Ciliberto and Tamer (2009).
+- It is not a replication of their airline application.
+- The example retains the central problem:
+  - firms may play multiple equilibria;
+  - the econometrician does not observe the equilibrium-selection rule;
+  - probability bounds identify a set of structural parameters.
+
+### Motivation
+
+- A standard likelihood assigns one probability to each observed market structure.
+- A game with multiple equilibria does not deliver that probability without a selection rule.
+- Rather than impose an arbitrary rule, we use restrictions that every admissible rule must satisfy.
+
+### Model
+
+- **Players and actions**
+  - Two firms are potential entrants in market $m$.
+  - $Y_{im}=1$ denotes entry; $Y_{im}=0$ denotes staying out.
+- **Information**
+  - $X_m\in\{0,1\}$ is an observed market characteristic shared by both firms.
+  - $\varepsilon_{im}$ is observed by both firms but not by the econometrician.
+  - The game is static and complete information.
+- **Parameters**
+  - $\beta_i$ measures firm $i$'s response to $X_m$.
+  - $\delta_j>0$ measures the competitive pressure exerted by firm $j$.
+  - The parameter vector is $\theta=(\beta_1,\beta_2,\delta_1,\delta_2)$.
+- **Profit**
+  - Staying out gives zero.
+  - The payoff from entry is
+
+$$
+\pi_{im}
+=Y_{im}\left[X_m\beta_i-\delta_jY_{jm}+\varepsilon_{im}\right],
+\qquad j\neq i.
+$$
+
+- **Normalization**
+  - Stand-alone deterministic profit equals zero when $X_m=0$.
+  - The variance of each $\varepsilon_{im}$ is normalized to one.
+  - A larger $\delta_j$ makes firm $j$ a stronger competitor.
+
+### Multiple Equilibria
+
+- Firm $i$ enters when
+
+$$
+Y_{im}
+=1\left[X_m\beta_i-\delta_jY_{jm}+\varepsilon_{im}\geq0\right].
+$$
+
+- Both $(1,0)$ and $(0,1)$ are Nash equilibria when
+
+$$
+-\beta_1X_m\leq\varepsilon_{1m}\leq\delta_2-\beta_1X_m,
+$$
+
+$$
+-\beta_2X_m\leq\varepsilon_{2m}\leq\delta_1-\beta_2X_m.
+$$
+
+- The blue rectangle in the next figure is the multiplicity region.
+- The diagram rewrites Figure 1 of Ciliberto and Tamer (2009) using $-\delta_jY_j$ with $\delta_j>0$.
+
+```{julia}
+#| echo: false
+#| code-fold: true
+#| label: fig-equilibrium-regions
+#| fig-cap: "Equilibrium regions for $X=1$ at the true parameter vector."
+
+import Pkg
+
+project_root = normpath(joinpath(@__DIR__, "..", ".."))
+Pkg.activate(project_root; io = devnull)
+
+ENV["GKSwstype"] = "100"
+
+using Plots
+
+theta_for_diagram = (
+    beta1 = 0.8,
+    beta2 = 0.6,
+    delta1 = 1.2,
+    delta2 = 0.8,
+)
+
+a1_diagram = -theta_for_diagram.beta1
+a2_diagram = -theta_for_diagram.beta2
+b1_diagram = a1_diagram + theta_for_diagram.delta2
+b2_diagram = a2_diagram + theta_for_diagram.delta1
+
+equilibrium_region_figure = plot(
+    xlabel = raw"$\varepsilon_1$",
+    ylabel = raw"$\varepsilon_2$",
+    xlims = (a1_diagram - 0.7, b1_diagram + 0.7),
+    ylims = (a2_diagram - 0.8, b2_diagram + 0.8),
+    xticks = ([a1_diagram, b1_diagram], [raw"$a_1$", raw"$b_1$"]),
+    yticks = ([a2_diagram, b2_diagram], [raw"$a_2$", raw"$b_2$"]),
+    grid = false,
+    legend = false,
+)
+plot!(
+    equilibrium_region_figure,
+    Shape(
+        [a1_diagram, b1_diagram, b1_diagram, a1_diagram],
+        [a2_diagram, a2_diagram, b2_diagram, b2_diagram],
+    );
+    color = :steelblue,
+    fillalpha = 0.25,
+    linealpha = 0.8,
+)
+vline!(
+    equilibrium_region_figure,
+    [a1_diagram, b1_diagram];
+    color = :steelblue,
+    linealpha = 0.65,
+)
+hline!(
+    equilibrium_region_figure,
+    [a2_diagram, b2_diagram];
+    color = :steelblue,
+    linealpha = 0.65,
+)
+annotate!(equilibrium_region_figure, -1.15, -1.00, text("Unique\n(0,0)", 9))
+annotate!(equilibrium_region_figure, 0.42, -1.00, text("Unique\n(1,0)", 9))
+annotate!(equilibrium_region_figure, -1.15, 1.02, text("Unique\n(0,1)", 9))
+annotate!(equilibrium_region_figure, 0.42, 1.02, text("Unique\n(1,1)", 9))
+annotate!(
+    equilibrium_region_figure,
+    (a1_diagram + b1_diagram) / 2,
+    (a2_diagram + b2_diagram) / 2,
+    text("Multiple\n(1,0) or (0,1)", 9),
+)
+equilibrium_region_figure
+```
+
+### Identification
+
+- For outcome $y$ and covariates $X$, define
+
+$$
+L_y(X;\theta)
+=\Pr_\theta(y\text{ is the unique equilibrium}\mid X),
+$$
+
+$$
+U_y(X;\theta)
+=\Pr_\theta(y\text{ is an equilibrium}\mid X).
+$$
+
+- Every equilibrium-selection rule satisfies
+
+$$
+L_y(X;\theta)
+\leq \Pr(Y=y\mid X)
+\leq U_y(X;\theta).
+$$
+
+- The identified set contains every parameter vector that satisfies all bounds:
+
+$$
+\Theta_I
+=
+\left\{
+\theta\in\Theta:
+L_y(X;\theta)
+\leq\Pr(Y=y\mid X)
+\leq U_y(X;\theta)
+\text{ for every }y\text{ and almost every }X
+\right\}.
+$$
+
+### Estimation
+
+- Estimate $p_y(x)=\Pr(Y=y\mid X=x)$ within each $X$ cell.
+- Penalize violations of the model probability bounds:
+
+$$
+q_{n,x}(\theta)
+=
+\sum_y
+\left\{
+[L_y(x;\theta)-\widehat p_y(x)]_+^2
++[\widehat p_y(x)-U_y(x;\theta)]_+^2
+\right\}.
+$$
+
+- Average only after computing the loss in each cell:
+
+$$
+Q_n(\theta)
+=
+\sum_x\widehat{\Pr}(X=x)q_{n,x}(\theta).
+$$
+
+- The teaching implementation uses the set estimator
+
+$$
+\widehat\Theta_I
+=
+\left\{
+\theta\in\Theta:nQ_n(\theta)\leq\log\log n
+\right\}.
+$$
+
+- This squared-violation criterion implements the paper's bound logic in a small discrete-$X$ setting.
+
+
+## 1. Choose the DGP and experimental design
+
+- Define the DGP and its true parameter values.
+- Define alternative experimental designs if needed.
+
+### Remarks
+
+- **DGP**
+  - Start with the simplest setting.
+    - Use a familiar distribution, such as a normal or uniform distribution.
+    - The magnitude of each term can strongly affect identification, so normalize it when appropriate.
+  - Even if your research suggests a specific DGP, begin with a simple version.
+    - Make the DGP more complicated only after validating the simple version.
+- **Experimental design**
+  - Include alternative DGPs when the experiment requires a comparison.
+  - Examples include:
+    - a correctly specified exogenous benchmark;
+    - a misspecified model;
+    - an endogenous setting estimated without an instrument;
+    - endogenous settings estimated with weak and strong instruments.
+
+### Example: The Two-Firm Entry Model
+
+- The observed market state is equally likely to be low or high:
+
+$$
+\Pr(X_m=0)=\Pr(X_m=1)=0.5.
+$$
+
+- Shocks are independent across firms and markets:
+
+$$
+\varepsilon_{im}\sim N(0,1).
+$$
+
+- The true parameter vector is
+
+$$
+\theta_0=(0.8,0.6,1.2,0.8).
+$$
+
+- The finite sample contains $n=5{,}000$ independent markets.
+- Uniform equilibrium selection is used only inside the DGP.
+- The estimator never observes that selection rule.
+
+```{julia}
+import Pkg
+
+project_root = normpath(joinpath(@__DIR__, "..", ".."))
+Pkg.activate(project_root; io = devnull)
+
+ENV["GKSwstype"] = "100"
+
+using DataFrames
+using Distributions
+using Plots
+using Random
+using Statistics
+
+VERSION == v"1.12.6" || error("This lesson requires Julia 1.12.6.")
+
+settings = (
+    true_theta = (
+        beta1 = 0.8,
+        beta2 = 0.6,
+        delta1 = 1.2,
+        delta2 = 0.8,
+    ),
+    population_grid_points = 19,
+    population_grid_tolerance = 1e-8,
+    sample_markets = 5_000,
+    replications = 100,
+    beta1_grid = collect(range(0.00, 1.60; length = 19)),
+    beta2_grid = collect(range(0.00, 1.20; length = 19)),
+    delta1_grid = collect(range(0.00, 2.40; length = 19)),
+    delta2_grid = collect(range(0.00, 1.60; length = 19)),
+    confidence_level = 0.95,
+    subsample_markets = 910,
+    subsamples = 99,
+    inference_iterations = 2,
+    firm2_entry_subsidy = 0.15,
+    example_data_seed = 2_026_081_002,
+    example_subsample_seed = 2_026_081_003,
+    monte_carlo_data_seed = 2_026_082_000,
+    monte_carlo_subsample_seed = 2_026_083_000,
+)
+
+profiles = [
+    0 1 0 1
+    0 0 1 1
+]
+X_cells = [0, 1]
+
+candidate_rows = [
+    (beta1 = beta1, beta2 = beta2, delta1 = delta1, delta2 = delta2)
+    for beta1 in settings.beta1_grid
+    for beta2 in settings.beta2_grid
+    for delta1 in settings.delta1_grid
+    for delta2 in settings.delta2_grid
+    if delta1 >= delta2
+]
+candidates = DataFrame(candidate_rows)
+@assert nrow(candidates) == 87_001
+
+DataFrame(
+    outcome = ["(0,0)", "(1,0)", "(0,1)", "(1,1)"],
+    Y1 = profiles[1, :],
+    Y2 = profiles[2, :],
+)
+```
+
+- The ordering $\delta_1\geq\delta_2$ labels firm 1 as the stronger competitor.
+- This section defines the experiment; it does not generate outcomes.
+
+## 2. Solve the model
+
+- Write a Julia function that solves the model at a candidate parameter vector.
+
+### Remarks
+
+- The solution method depends on the model, but standard computational techniques often apply.
+- Make the solver reusable for counterfactual analysis.
+- Validate the code by checking whether the solution satisfies the equilibrium conditions.
+- In a game, decide whether the application requires one equilibrium or every equilibrium.
+  - Enumerate all action profiles in a small discrete game.
+  - Larger models may require multiple starting values, continuation methods, or specialized algorithms.
+
+### Example: The Two-Firm Entry Model
+
+- The model has four possible action profiles.
+- We check the best-response conditions for all four profiles.
+- The solver returns every pure-strategy Nash equilibrium.
+
+```{julia}
+function equilibrium_mask!(
+    mask;
+    X,
+    epsilon,
+    beta1,
+    beta2,
+    delta1,
+    delta2,
+)
+    standalone_threshold_1 = -X * beta1
+    standalone_threshold_2 = -X * beta2
+
+    mask[1] =
+        epsilon[1] <= standalone_threshold_1 &&
+        epsilon[2] <= standalone_threshold_2
+    mask[2] =
+        epsilon[1] >= standalone_threshold_1 &&
+        epsilon[2] <= standalone_threshold_2 + delta1
+    mask[3] =
+        epsilon[1] <= standalone_threshold_1 + delta2 &&
+        epsilon[2] >= standalone_threshold_2
+    mask[4] =
+        epsilon[1] >= standalone_threshold_1 + delta2 &&
+        epsilon[2] >= standalone_threshold_2 + delta1
+    return mask
+end
+
+function pure_nash_equilibria(;
+    X,
+    epsilon,
+    beta1,
+    beta2,
+    delta1,
+    delta2,
+)
+    mask = falses(4)
+    equilibrium_mask!(
+        mask;
+        X = X,
+        epsilon = epsilon,
+        beta1 = beta1,
+        beta2 = beta2,
+        delta1 = delta1,
+        delta2 = delta2,
+    )
+    return findall(mask)
+end
+
+pure_nash_equilibria(;
+    X = 1,
+    epsilon = [-0.4, 0.2],
+    settings.true_theta...,
+)
+```
+
+- The check returns both asymmetric equilibria for this shock realization.
+- Population identification below does not condition on this particular realization.
+
+## 3. Analyze identification in the population
+
+- Derive the population identification conditions analytically.
+- Write a Julia function that returns the loss from the identification conditions at a candidate parameter vector.
+
+### Remarks
+
+- This step is not feasible in every setting, but it is important whenever possible.
+- Identification in structural models can be ambiguous—even in published work.
+  - If the parameters are not identified, estimation cannot recover a unique parameter vector.
+  - Population analysis separates an identification problem from finite-sample bias.
+- The appropriate approach depends on the model, but a grid search is often the simplest starting point.
+  - Evaluate the objective around the true parameter vector.
+  - Distinguish point identification from set identification.
+  - If the model is set identified, plot low-dimensional projections of the identified set.
+  - A coarse grid can miss a lower-dimensional set between grid points.
+
+### Example: The Two-Firm Entry Model
+
+- The population distribution is available analytically because the shocks are normal.
+- No finite sample is generated in this section.
+- The analysis proceeds in two steps.
+  1. Search a four-dimensional grid for parameter vectors with zero population loss.
+  2. Hold \(\beta_1\) fixed at a sequence of values and re-solve the other three parameters to trace the set between grid points.
+- The DGP uses uniform equilibrium selection to construct the population outcome probabilities.
+  - The identification criterion uses those probabilities and the model bounds, not the selection rule.
+- **Step 1: Search the four-dimensional grid**
+  - First construct the population probability bounds and the population loss.
+- Define the thresholds
+
+$$
+a_1(x)=-\beta_1x,
+\qquad
+a_2(x)=-\beta_2x,
+$$
+
+$$
+b_1(x;\theta)=a_1(x)+\delta_2,
+\qquad
+b_2(x;\theta)=a_2(x)+\delta_1.
+$$
+
+- The multiplicity probability in cell $x$ is
+
+$$
+M(x;\theta)
+=
+[\Phi(b_1)-\Phi(a_1)]
+[\Phi(b_2)-\Phi(a_2)].
+$$
+
+```{julia}
+#| echo: false
+#| code-fold: true
+#| label: fig-outcome-bound-regions
+#| fig-cap: "Shock regions defining the upper and lower probability bounds for outcome $(1,0)$."
+
+function outcome_10_region_panel(; lower_bound)
+    theta = settings.true_theta
+    x = 1
+    a1 = -x * theta.beta1
+    a2 = -x * theta.beta2
+    b1 = a1 + theta.delta2
+    b2 = a2 + theta.delta1
+    x_limits = (a1 - 0.55, b1 + 0.75)
+    y_limits = (a2 - 0.75, b2 + 0.55)
+    figure = plot(
+        xlabel = raw"$\varepsilon_1$",
+        ylabel = raw"$\varepsilon_2$",
+        title = lower_bound ? "Lower bound: unique (1,0)" : "Upper bound: (1,0) is an equilibrium",
+        xlims = x_limits,
+        ylims = y_limits,
+        xticks = ([a1, b1], [raw"$a_1$", raw"$b_1$"]),
+        yticks = ([a2, b2], [raw"$a_2$", raw"$b_2$"]),
+        grid = false,
+        legend = false,
+    )
+    if lower_bound
+        plot!(
+            figure,
+            Shape(
+                [a1, x_limits[2], x_limits[2], a1],
+                [y_limits[1], y_limits[1], a2, a2],
+            );
+            color = :steelblue,
+            fillalpha = 0.28,
+            linealpha = 0,
+        )
+        plot!(
+            figure,
+            Shape(
+                [b1, x_limits[2], x_limits[2], b1],
+                [a2, a2, b2, b2],
+            );
+            color = :steelblue,
+            fillalpha = 0.28,
+            linealpha = 0,
+        )
+    else
+        plot!(
+            figure,
+            Shape(
+                [a1, x_limits[2], x_limits[2], a1],
+                [y_limits[1], y_limits[1], b2, b2],
+            );
+            color = :steelblue,
+            fillalpha = 0.28,
+            linealpha = 0,
+        )
+    end
+    plot!(
+        figure,
+        Shape([a1, b1, b1, a1], [a2, a2, b2, b2]);
+        color = :darkorange,
+        fillalpha = 0.20,
+        linecolor = :darkorange,
+    )
+    annotate!(
+        figure,
+        (a1 + b1) / 2,
+        (a2 + b2) / 2,
+        text("Multiplicity", 8),
+    )
+    return figure
+end
+
+plot(
+    outcome_10_region_panel(lower_bound = false),
+    outcome_10_region_panel(lower_bound = true);
+    layout = (1, 2),
+    size = (1_050, 420),
+)
+```
+
+- **Bounds as shock-space probabilities**
+  - The upper bound includes every shock for which $(1,0)$ is an equilibrium.
+  - The lower bound excludes the multiplicity rectangle and retains shocks for which $(1,0)$ is unique.
+  - The analytical bounds are
+
+$$
+L_{00}(x;\theta)=U_{00}(x;\theta)
+=\Phi(a_1)\Phi(a_2),
+$$
+
+$$
+U_{10}(x;\theta)=[1-\Phi(a_1)]\Phi(b_2),
+\qquad
+L_{10}(x;\theta)=U_{10}(x;\theta)-M(x;\theta),
+$$
+
+$$
+U_{01}(x;\theta)=\Phi(b_1)[1-\Phi(a_2)],
+\qquad
+L_{01}(x;\theta)=U_{01}(x;\theta)-M(x;\theta),
+$$
+
+$$
+L_{11}(x;\theta)=U_{11}(x;\theta)
+=[1-\Phi(b_1)][1-\Phi(b_2)].
+$$
+
+- Let $p_y^0(x)$ denote the population outcome probability generated at $\theta_0$.
+- Compute a loss separately in each $X$ cell:
+
+$$
+q_x^{\mathrm{pop}}(\theta)
+=
+\sum_y
+\left\{
+[L_y(x;\theta)-p_y^0(x)]_+^2
++[p_y^0(x)-U_y(x;\theta)]_+^2
+\right\}.
+$$
+
+- Average only after computing the cell losses:
+
+$$
+Q^{\mathrm{pop}}(\theta)
+=
+\sum_{x\in\{0,1\}}\Pr(X=x)q_x^{\mathrm{pop}}(\theta).
+$$
+
+- Because both cells have positive probability,
+
+$$
+Q^{\mathrm{pop}}(\theta)=0
+\iff
+L_y(x;\theta)\leq p_y^0(x)\leq U_y(x;\theta)
+\quad\text{for every }x\text{ and }y.
+$$
+
+- Therefore, the population identified set is
+
+$$
+\Theta_I
+=
+\left\{
+\theta\in\Theta:
+Q^{\mathrm{pop}}(\theta)=0
+\right\}.
+$$
+
+- Approximate this set on the Cartesian grid
+
+$$
+G
+=
+G_{\beta_1}\times G_{\beta_2}\times
+G_{\delta_1}\times G_{\delta_2}
+\cap\{\delta_1\geq\delta_2\}.
+$$
+
+- Each parameter grid contains 19 points from 0 to 200 percent of its true value.
+- The unrestricted Cartesian product contains $19^4=130{,}321$ points.
+- The ordering $\delta_1\geq\delta_2$ leaves 87,001 candidates.
+- The exact grid approximation is
+
+$$
+\Theta_{I,G}
+=
+\left\{
+\theta\in G:
+Q^{\mathrm{pop}}(\theta)=0
+\right\}.
+$$
+
+```{julia}
+#| output: false
+
+function analytic_equilibrium_bounds(;
+    X_cells,
+    beta1,
+    beta2,
+    delta1,
+    delta2,
+    firm2_entry_subsidy = 0.0,
+)
+    cells = length(X_cells)
+    lower = zeros(cells, 4)
+    upper = zeros(cells, 4)
+    multiplicity = zeros(cells)
+    standard_normal = Normal()
+
+    for (cell, x) in enumerate(X_cells)
+        F1_0 = cdf(standard_normal, -x * beta1)
+        F2_0 = cdf(
+            standard_normal,
+            -x * beta2 - firm2_entry_subsidy,
+        )
+        F1_delta = cdf(standard_normal, delta2 - x * beta1)
+        F2_delta = cdf(
+            standard_normal,
+            delta1 - x * beta2 - firm2_entry_subsidy,
+        )
+        multiplicity[cell] =
+            (F1_delta - F1_0) * (F2_delta - F2_0)
+
+        lower[cell, 1] = F1_0 * F2_0
+        upper[cell, 1] = lower[cell, 1]
+        upper[cell, 2] = (1 - F1_0) * F2_delta
+        lower[cell, 2] = upper[cell, 2] - multiplicity[cell]
+        upper[cell, 3] = F1_delta * (1 - F2_0)
+        lower[cell, 3] = upper[cell, 3] - multiplicity[cell]
+        lower[cell, 4] = (1 - F1_delta) * (1 - F2_delta)
+        upper[cell, 4] = lower[cell, 4]
+    end
+
+    return (
+        lower = lower,
+        upper = upper,
+        multiplicity_rate = mean(multiplicity),
+    )
+end
+
+function uniform_selection_probabilities(; bounds)
+    probabilities = copy(bounds.lower)
+    probabilities[:, 2] .+=
+        0.5 .* (bounds.upper[:, 2] .- bounds.lower[:, 2])
+    probabilities[:, 3] .+=
+        0.5 .* (bounds.upper[:, 3] .- bounds.lower[:, 3])
+    return probabilities
+end
+
+function conditional_bound_violation_objective(;
+    observed_probabilities,
+    cell_weights,
+    bounds,
+)
+    objective = 0.0
+    for cell in axes(observed_probabilities, 1)
+        cell_loss = 0.0
+        for outcome in axes(observed_probabilities, 2)
+            observed = observed_probabilities[cell, outcome]
+            lower_violation = max(
+                bounds.lower[cell, outcome] - observed,
+                0.0,
+            )
+            upper_violation = max(
+                observed - bounds.upper[cell, outcome],
+                0.0,
+            )
+            cell_loss += lower_violation^2 + upper_violation^2
+        end
+        objective += cell_weights[cell] * cell_loss
+    end
+    return objective
+end
+
+function bounds_over_candidates(;
+    candidates,
+    X_cells,
+    firm2_entry_subsidy = 0.0,
+)
+    return [
+        analytic_equilibrium_bounds(
+            X_cells = X_cells,
+            beta1 = row.beta1,
+            beta2 = row.beta2,
+            delta1 = row.delta1,
+            delta2 = row.delta2,
+            firm2_entry_subsidy = firm2_entry_subsidy,
+        )
+        for row in eachrow(candidates)
+    ]
+end
+
+function conditional_objective_curve(;
+    candidates,
+    observed_probabilities,
+    cell_weights,
+    bounds_grid,
+)
+    curve = copy(candidates)
+    curve.objective = [
+        conditional_bound_violation_objective(
+            observed_probabilities = observed_probabilities,
+            cell_weights = cell_weights,
+            bounds = bounds,
+        )
+        for bounds in bounds_grid
+    ]
+    return curve
+end
+
+function truth_index(; candidates, truth)
+    distance = (
+        (candidates.beta1 .- truth.beta1).^2 .+
+        (candidates.beta2 .- truth.beta2).^2 .+
+        (candidates.delta1 .- truth.delta1).^2 .+
+        (candidates.delta2 .- truth.delta2).^2
+    )
+    return argmin(distance)
+end
+
+function projection_summary(; candidates, retained, truth)
+    any(retained) || error("The retained set is empty.")
+    retained_candidates = candidates[retained, :]
+    return DataFrame(
+        parameter = ["beta1", "beta2", "delta1", "delta2"],
+        truth = [truth.beta1, truth.beta2, truth.delta1, truth.delta2],
+        lower = [
+            minimum(retained_candidates.beta1),
+            minimum(retained_candidates.beta2),
+            minimum(retained_candidates.delta1),
+            minimum(retained_candidates.delta2),
+        ],
+        upper = [
+            maximum(retained_candidates.beta1),
+            maximum(retained_candidates.beta2),
+            maximum(retained_candidates.delta1),
+            maximum(retained_candidates.delta2),
+        ],
+    )
+end
+
+population_bounds = analytic_equilibrium_bounds(;
+    X_cells = X_cells,
+    settings.true_theta...,
+)
+population_probabilities = uniform_selection_probabilities(
+    bounds = population_bounds,
+)
+population_weights = fill(0.5, 2)
+
+population_bounds_grid = bounds_over_candidates(
+    candidates = candidates,
+    X_cells = X_cells,
+)
+population_curve = conditional_objective_curve(
+    candidates = candidates,
+    observed_probabilities = population_probabilities,
+    cell_weights = population_weights,
+    bounds_grid = population_bounds_grid,
+)
+population_curve.exact = population_curve.objective .== 0.0
+population_curve.near_zero =
+    population_curve.objective .<= settings.population_grid_tolerance
+
+true_index = truth_index(
+    candidates = candidates,
+    truth = settings.true_theta,
+)
+@assert population_curve.objective[true_index] <= 1e-20
+@assert count(population_curve.exact) == 1
+@assert count(population_curve.near_zero) == 1
+
+bounds_grid = population_bounds_grid
+exact_grid_candidates = population_curve[population_curve.exact, :]
+```
+
+
+```{julia}
+DataFrame(
+    criterion = ["Q = 0", "Q <= 1e-8"],
+    retained_grid_points = [
+        count(population_curve.exact),
+        count(population_curve.near_zero),
+    ],
+)
+```
+
+```{julia}
+#| code-fold: true
+#| output: false
+
+function cross_product(origin, point_a, point_b)
+    return (
+        (point_a[1] - origin[1]) * (point_b[2] - origin[2]) -
+        (point_a[2] - origin[2]) * (point_b[1] - origin[1])
+    )
+end
+
+function convex_hull(points)
+    sorted_points = sort(unique(points))
+    length(sorted_points) <= 2 && return sorted_points
+
+    lower = Tuple{Float64, Float64}[]
+    for point in sorted_points
+        while length(lower) >= 2 &&
+              cross_product(lower[end - 1], lower[end], point) <= 0
+            pop!(lower)
+        end
+        push!(lower, point)
+    end
+
+    upper = Tuple{Float64, Float64}[]
+    for point in reverse(sorted_points)
+        while length(upper) >= 2 &&
+              cross_product(upper[end - 1], upper[end], point) <= 0
+            pop!(upper)
+        end
+        push!(upper, point)
+    end
+    return vcat(lower[1:(end - 1)], upper[1:(end - 1)])
+end
+
+function projection_points(; identified, x_name, y_name)
+    return unique([
+        (Float64(row[x_name]), Float64(row[y_name]))
+        for row in eachrow(identified)
+    ])
+end
+
+function relative_parameter_axis(truth_value)
+    shares = [0.0, 1.0, 2.0]
+    values = truth_value .* shares
+    labels = [
+        "$(Int(round(100 * share)))%\n$(round(value; digits = 2))"
+        for (share, value) in zip(shares, values)
+    ]
+    return (limits = (first(values), last(values)), ticks = (values, labels))
+end
+
+function identified_projection_plot(;
+    identified,
+    x_name,
+    y_name,
+    truth,
+    labels,
+    connect_in_beta1_order = false,
+)
+    points = projection_points(
+        identified = identified,
+        x_name = x_name,
+        y_name = y_name,
+    )
+    x_axis = relative_parameter_axis(getproperty(truth, x_name))
+    y_axis = relative_parameter_axis(getproperty(truth, y_name))
+    figure = plot(
+        xlabel = labels[x_name],
+        ylabel = labels[y_name],
+        title = "$(x_name), $(y_name)",
+        legend = false,
+        xlims = x_axis.limits,
+        ylims = y_axis.limits,
+        xticks = x_axis.ticks,
+        yticks = y_axis.ticks,
+    )
+
+    if connect_in_beta1_order
+        trace_order = sortperm(identified.beta1)
+        marker_order = trace_order[1:8:end]
+        plot!(
+            figure,
+            identified[trace_order, x_name],
+            identified[trace_order, y_name];
+            color = :steelblue,
+            linewidth = 3,
+            linealpha = 0.65,
+        )
+        scatter!(
+            figure,
+            identified[marker_order, x_name],
+            identified[marker_order, y_name];
+            color = :steelblue,
+            markersize = 2.5,
+            markeralpha = 0.70,
+            markerstrokewidth = 0,
+        )
+    else
+        hull = convex_hull(points)
+        if length(hull) >= 3
+            plot!(
+                figure,
+                Shape(first.(hull), last.(hull));
+                color = :steelblue,
+                fillalpha = 0.20,
+                linecolor = :steelblue,
+            )
+        elseif length(hull) == 2
+            plot!(
+                figure,
+                first.(hull),
+                last.(hull);
+                color = :steelblue,
+                linewidth = 2,
+            )
+        end
+        scatter!(
+            figure,
+            first.(points),
+            last.(points);
+            color = :steelblue,
+            markersize = 3,
+            markerstrokewidth = 0,
+        )
+    end
+    scatter!(
+        figure,
+        [getproperty(truth, x_name)],
+        [getproperty(truth, y_name)];
+        color = :red,
+        marker = :star5,
+        markersize = 7,
+    )
+    return figure
+end
+
+parameter_pairs = [
+    (:beta1, :beta2),
+    (:beta1, :delta1),
+    (:beta1, :delta2),
+    (:beta2, :delta1),
+    (:beta2, :delta2),
+    (:delta1, :delta2),
+]
+parameter_labels = Dict(
+    :beta1 => raw"$\beta_1$",
+    :beta2 => raw"$\beta_2$",
+    :delta1 => raw"$\delta_1$",
+    :delta2 => raw"$\delta_2$",
+)
+```
+
+- The following figure projects $\Theta_{I,G}$ onto every pair of parameters.
+
+```{julia}
+#| label: fig-population-grid-exact
+#| fig-cap: 'Pairwise projections of grid points with $Q^{\mathrm{pop}}(\theta)=0$.'
+
+exact_grid_projection_figures = [
+    identified_projection_plot(
+        identified = exact_grid_candidates,
+        x_name = pair[1],
+        y_name = pair[2],
+        truth = settings.true_theta,
+        labels = parameter_labels,
+    )
+    for pair in parameter_pairs
+]
+
+plot(
+    exact_grid_projection_figures...;
+    layout = (2, 3),
+    size = (1_050, 650),
+)
+```
+
+- The exact criterion and the $10^{-8}$ numerical check both retain only the true grid point.
+- The grid-projection figure therefore contains one point in every projection.
+- This result does not establish point identification: a Cartesian grid can miss a lower-dimensional set between its nodes.
+- **Step 2: Trace the identified set between grid points**
+  - Three independent equalities restrict four parameters, so one free dimension can remain.
+  - Use $\beta_1$ as a continuation parameter.
+  - For each value of $\beta_1$, re-solve $\beta_2$, $\delta_1$, and $\delta_2$.
+  - $\beta_1$ indexes the curve; it is not the only unknown parameter.
+- The no-entry equality gives $\beta_2$ directly as a function of $\beta_1$:
+
+$$
+\Phi(-\beta_1)\Phi(-\beta_2)=p_{00}^0(1).
+$$
+
+- Given $\beta_1$, solve
+
+$$
+\beta_2(\beta_1)
+=
+-\Phi^{-1}\!\left(
+\frac{p_{00}^0(1)}{\Phi(-\beta_1)}
+\right).
+$$
+
+- Then solve $(\delta_1,\delta_2)$ from the two all-entry probabilities:
+
+$$
+p_{11}^0(0)
+=\bar\Phi(\delta_2)\bar\Phi(\delta_1),
+$$
+
+$$
+p_{11}^0(1)
+=\bar\Phi(\delta_2-\beta_1)
+ \bar\Phi(\delta_1-\beta_2),
+$$
+
+- Finally, retain solutions that satisfy the bounds for $(1,0)$ and $(0,1)$.
+
+```{julia}
+#| code-fold: true
+#| output: false
+
+function bisect_root(function_value, lower, upper; iterations = 100)
+    lower_value = function_value(lower)
+    upper_value = function_value(upper)
+    isfinite(lower_value) && isfinite(upper_value) || return nothing
+    lower_value == 0 && return lower
+    upper_value == 0 && return upper
+    signbit(lower_value) == signbit(upper_value) && return nothing
+
+    for _ in 1:iterations
+        midpoint = (lower + upper) / 2
+        midpoint_value = function_value(midpoint)
+        midpoint_value == 0 && return midpoint
+        if signbit(lower_value) == signbit(midpoint_value)
+            lower = midpoint
+            lower_value = midpoint_value
+        else
+            upper = midpoint
+        end
+    end
+    return (lower + upper) / 2
+end
+
+function bracketed_roots(function_value, lower, upper; nodes = 1_001)
+    grid = range(lower, upper; length = nodes)
+    roots = Float64[]
+    previous_x = first(grid)
+    previous_value = function_value(previous_x)
+
+    for current_x in Iterators.drop(grid, 1)
+        current_value = function_value(current_x)
+        if isfinite(previous_value) && isfinite(current_value)
+            if previous_value == 0
+                push!(roots, previous_x)
+            elseif current_value == 0
+                push!(roots, current_x)
+            elseif signbit(previous_value) != signbit(current_value)
+                root = bisect_root(
+                    function_value,
+                    previous_x,
+                    current_x,
+                )
+                isnothing(root) || push!(roots, root)
+            end
+        end
+        previous_x = current_x
+        previous_value = current_value
+    end
+    return unique(round.(roots; digits = 12))
+end
+```
+
+```{julia}
+function trace_identified_candidates(;
+    beta1_grid,
+    truth,
+    X_cells,
+    observed_probabilities,
+    cell_weights,
+)
+    standard_normal = Normal()
+    p00_x1 = observed_probabilities[2, 1]
+    p11_x0 = observed_probabilities[1, 4]
+    p11_x1 = observed_probabilities[2, 4]
+    rows = NamedTuple[]
+
+    for beta1 in beta1_grid
+        beta2_probability = p00_x1 / cdf(standard_normal, -beta1)
+        0 < beta2_probability < 1 || continue
+        beta2 = -quantile(standard_normal, beta2_probability)
+        0 <= beta2 <= 2 * truth.beta2 || continue
+
+        function delta2_from(delta1)
+            delta2_tail = p11_x0 / ccdf(standard_normal, delta1)
+            0 < delta2_tail < 1 || return NaN
+            return quantile(standard_normal, 1 - delta2_tail)
+        end
+
+        delta1_roots = bracketed_roots(
+            delta1 -> begin
+                delta2 = delta2_from(delta1)
+                isfinite(delta2) || return NaN
+                return ccdf(standard_normal, delta2 - beta1) *
+                    ccdf(standard_normal, delta1 - beta2) - p11_x1
+            end,
+            0.0,
+            2 * truth.delta1,
+        )
+
+        for delta1 in delta1_roots
+            delta2 = delta2_from(delta1)
+            0 <= delta2 <= 2 * truth.delta2 || continue
+            delta1 >= delta2 || continue
+            bounds = analytic_equilibrium_bounds(
+                X_cells = X_cells,
+                beta1 = beta1,
+                beta2 = beta2,
+                delta1 = delta1,
+                delta2 = delta2,
+            )
+            feasible =
+                all(bounds.lower[:, 2:3] .<= observed_probabilities[:, 2:3]) &&
+                all(observed_probabilities[:, 2:3] .<= bounds.upper[:, 2:3])
+            feasible || continue
+            objective = conditional_bound_violation_objective(
+                observed_probabilities = observed_probabilities,
+                cell_weights = cell_weights,
+                bounds = bounds,
+            )
+            push!(
+                rows,
+                (
+                    beta1 = beta1,
+                    beta2 = beta2,
+                    delta1 = delta1,
+                    delta2 = delta2,
+                    objective = objective,
+                ),
+            )
+        end
+    end
+    return DataFrame(rows)
+end
+
+beta1_identification_grid = range(
+    0.0,
+    2 * settings.true_theta.beta1;
+    length = 641,
+)
+traced_identified_candidates = trace_identified_candidates(
+    beta1_grid = beta1_identification_grid,
+    truth = settings.true_theta,
+    X_cells = X_cells,
+    observed_probabilities = population_probabilities,
+    cell_weights = population_weights,
+)
+
+@assert maximum(traced_identified_candidates.objective) <= 1e-20
+```
+
+```{julia}
+DataFrame(
+    beta1_grid_points = [length(beta1_identification_grid)],
+    retained_points = [nrow(traced_identified_candidates)],
+    maximum_objective = [maximum(traced_identified_candidates.objective)],
+)
+```
+
+- The code finds 68 feasible values along the $\beta_1$ grid, all with population loss below $10^{-20}$.
+- The following figure projects the traced curve onto every pair of parameters.
+
+```{julia}
+#| label: fig-population-identified-trace
+#| fig-cap: 'Pairwise projections of the population identified set traced by varying $\beta_1$.'
+
+traced_projection_figures = [
+    identified_projection_plot(
+        identified = traced_identified_candidates,
+        x_name = pair[1],
+        y_name = pair[2],
+        truth = settings.true_theta,
+        labels = parameter_labels,
+        connect_in_beta1_order = true,
+    )
+    for pair in parameter_pairs
+]
+
+plot(
+    traced_projection_figures...;
+    layout = (2, 3),
+    size = (1_050, 650),
+)
+```
+
+- **Population result**
+  - The four-dimensional grid retains only the true parameter vector.
+  - The continuation exercise finds a curve of parameter vectors with $Q^{\mathrm{pop}}(\theta)=0$ up to numerical error.
+  - The first result reflects the coarse grid; the second shows that the model is partially identified within the parameter box.
+
+
+## 4. Generate data and check descriptive statistics
+
+- Generate data from the DGP.
+- Check descriptive statistics for the generated data.
+
+### Remarks
+
+- Check the variation in the outcomes.
+  - A very rare outcome can weaken identification in a finite sample.
+
+### Example: The Two-Firm Entry Model
+
+- A market is the sampling unit.
+- The DGP selects uniformly when both asymmetric equilibria are available.
+- The estimator observes $(X_m,Y_{1m},Y_{2m})$.
+- It does not observe the shocks, the selection draw, or the number of equilibria.
+
+```{julia}
+#| code-fold: true
+
+function simulate_markets(; rng, markets, theta, profiles)
+    X = rand(rng, [0, 1], markets)
+    epsilon = randn(rng, 2, markets)
+    outcome = zeros(Int, markets)
+    equilibrium_count = zeros(Int, markets)
+    mask = falses(4)
+
+    for market in 1:markets
+        equilibrium_mask!(
+            mask;
+            X = X[market],
+            epsilon = view(epsilon, :, market),
+            beta1 = theta.beta1,
+            beta2 = theta.beta2,
+            delta1 = theta.delta1,
+            delta2 = theta.delta2,
+        )
+        equilibria = findall(mask)
+        isempty(equilibria) &&
+            error("A generated market has no pure-strategy equilibrium.")
+        outcome[market] = rand(rng, equilibria)
+        equilibrium_count[market] = length(equilibria)
+    end
+
+    labels = ["(0,0)", "(1,0)", "(0,1)", "(1,1)"]
+    return DataFrame(
+        market = 1:markets,
+        X = X,
+        Y1 = profiles[1, outcome],
+        Y2 = profiles[2, outcome],
+        outcome = outcome,
+        outcome_label = labels[outcome],
+        equilibrium_count_dgp = equilibrium_count,
+    )
+end
+
+example_data = simulate_markets(
+    rng = MersenneTwister(settings.example_data_seed),
+    markets = settings.sample_markets,
+    theta = settings.true_theta,
+    profiles = profiles,
+)
+```
+
+```{julia}
+first(
+    select(example_data, :market, :X, :Y1, :Y2, :outcome_label),
+    8,
+)
+```
+
+- `outcome_label` reports the market structure directly.
+- The integer `outcome` remains an internal array index.
+
+```{julia}
+DataFrame(
+    markets = [nrow(example_data)],
+    mean_X = [mean(example_data.X)],
+    entry_rate_1 = [mean(example_data.Y1)],
+    entry_rate_2 = [mean(example_data.Y2)],
+    multiple_equilibrium_rate = [
+        mean(example_data.equilibrium_count_dgp .> 1)
+    ],
+)
+```
+
+```{julia}
+combine(
+    groupby(example_data, [:X, :outcome_label]),
+    nrow => :markets,
+)
+```
+
+- Every $X$ cell should contain all four market structures.
+- `multiple_equilibrium_rate` is the fraction of simulated markets with two equilibria.
+- It is a DGP audit, not an estimator input.
+
+## 5. Estimate the model
+
+- Define the objective function.
+- Plot the objective function.
+- Estimate the model.
+
+### Remarks
+
+- Check the shape of the objective function before estimation.
+  - If the objective function does not have the expected shape, estimation will fail.
+- When using an optimizer, do not place every initial value close to the true parameter vector.
+
+### Example: The Two-Firm Entry Model
+
+- Cell frequencies estimate
+
+$$
+\widehat p_y(x)=\widehat{\Pr}(Y=y\mid X=x).
+$$
+
+- The estimated set is
+
+$$
+\widehat\Theta_I
+=
+\left\{
+\theta\in\Theta:
+nQ_n(\theta)\leq\log\log n
+\right\}.
+$$
+
+```{julia}
+#| code-fold: true
+
+function empirical_moments(;
+    data,
+    X_cells,
+    outcomes,
+    rows = nothing,
+)
+    selected_rows = isnothing(rows) ?
+        collect(axes(data, 1)) : collect(rows)
+    observations = length(selected_rows)
+    cells = length(X_cells)
+    weights = zeros(cells)
+    probabilities = zeros(cells, outcomes)
+
+    for (cell, x) in enumerate(X_cells)
+        cell_rows = filter(
+            row -> data.X[row] == x,
+            selected_rows,
+        )
+        isempty(cell_rows) && error("An X cell is empty.")
+        weights[cell] = length(cell_rows) / observations
+        for outcome in 1:outcomes
+            probabilities[cell, outcome] = mean(
+                data.outcome[cell_rows] .== outcome
+            )
+        end
+    end
+    return (probabilities = probabilities, weights = weights)
+end
+
+function sample_objective_curve(;
+    data,
+    X_cells,
+    candidates,
+    bounds_grid,
+    rows = nothing,
+)
+    empirical = empirical_moments(
+        data = data,
+        X_cells = X_cells,
+        outcomes = size(first(bounds_grid).lower, 2),
+        rows = rows,
+    )
+    return conditional_objective_curve(
+        candidates = candidates,
+        observed_probabilities = empirical.probabilities,
+        cell_weights = empirical.weights,
+        bounds_grid = bounds_grid,
+    )
+end
+
+example_curve = sample_objective_curve(
+    data = example_data,
+    X_cells = X_cells,
+    candidates = candidates,
+    bounds_grid = bounds_grid,
+)
+example_curve.scaled_objective =
+    settings.sample_markets .* example_curve.objective
+example_curve.estimated_set =
+    example_curve.scaled_objective .<= log(log(settings.sample_markets))
+```
+
+```{julia}
+DataFrame(
+    Q_n_at_truth = [example_curve.objective[true_index]],
+    minimum_Q_n = [minimum(example_curve.objective)],
+    estimated_grid_points = [count(example_curve.estimated_set)],
+)
+```
+
+```{julia}
+projection_summary(
+    candidates = candidates,
+    retained = example_curve.estimated_set,
+    truth = settings.true_theta,
+)
+```
+
+- The next panels project the four-dimensional estimated set onto every parameter pair.
+- The shaded convex hull summarizes projected grid points; it is not the set itself.
+
+```{julia}
+estimated_candidates = example_curve[example_curve.estimated_set, :]
+estimated_projection_figures = [
+    identified_projection_plot(
+        identified = estimated_candidates,
+        x_name = pair[1],
+        y_name = pair[2],
+        truth = settings.true_theta,
+        labels = parameter_labels,
+    )
+    for pair in parameter_pairs
+]
+
+plot(
+    estimated_projection_figures...;
+    layout = (2, 3),
+    size = (1_050, 650),
+)
+```
+
+- The criterion retains 494 of 87,001 grid points in this sample.
+- No one-dimensional projection reaches the 0- or 200-percent boundary.
+- These projections are an estimated set, not a 95 percent confidence region.
+
+
+## 6. Conduct inference
+
+- Compute standard errors or a confidence region using an appropriate method.
+
+### Remarks
+
+- The appropriate method depends on the model.
+- When resampling, first choose the resampling unit.
+- For a regular point-identified model without an analytical asymptotic variance, a bootstrap may be sufficient.
+- For a set-identified model, use a procedure designed to construct a confidence region for a parameter set.
+
+### Example: The Two-Firm Entry Model
+
+- Markets are independent sampling units.
+- Subsampling draws markets without replacement.
+- The subsample size is
+
+$$
+b_n=\operatorname{round}(n^{0.8})=910.
+$$
+
+- Each dataset uses 99 subsamples and two cutoff updates.
+- The test statistic is
+
+$$
+T_n(\theta)
+=
+n\left[
+Q_n(\theta)-\min_{t\in\Theta}Q_n(t)
+\right].
+$$
+
+```{julia}
+#| code-fold: true
+
+function draw_subsample(; rng, data, subsample_markets)
+    return randperm(rng, nrow(data))[1:subsample_markets]
+end
+
+function subsampling_confidence_region(;
+    data,
+    X_cells,
+    candidates,
+    bounds_grid,
+    confidence_level,
+    subsample_markets,
+    subsamples,
+    iterations,
+    rng,
+)
+    markets = nrow(data)
+    full_curve = sample_objective_curve(
+        data = data,
+        X_cells = X_cells,
+        candidates = candidates,
+        bounds_grid = bounds_grid,
+    )
+    full_objective = full_curve.objective
+    full_statistic = markets .* (
+        full_objective .- minimum(full_objective)
+    )
+    subsample_statistics = zeros(subsamples, nrow(candidates))
+
+    for draw in 1:subsamples
+        rows = draw_subsample(
+            rng = rng,
+            data = data,
+            subsample_markets = subsample_markets,
+        )
+        subsample_curve = sample_objective_curve(
+            data = data,
+            X_cells = X_cells,
+            candidates = candidates,
+            bounds_grid = bounds_grid,
+            rows = rows,
+        )
+        subsample_objective = subsample_curve.objective
+        subsample_statistics[draw, :] .= subsample_markets .* (
+            subsample_objective .- minimum(subsample_objective)
+        )
+    end
+
+    cutoff = 0.0
+    critical_values = DataFrame(
+        iteration = Int[],
+        candidate_grid_points = Int[],
+        critical_value = Float64[],
+    )
+
+    for iteration in 1:iterations
+        candidate_indices = findall(
+            full_statistic .<= cutoff + 1e-12
+        )
+        isempty(candidate_indices) &&
+            error("The current confidence region is empty.")
+        pointwise_cutoffs = [
+            quantile(
+                view(subsample_statistics, :, index),
+                confidence_level,
+            )
+            for index in candidate_indices
+        ]
+        cutoff = maximum(pointwise_cutoffs)
+        push!(
+            critical_values,
+            (iteration, length(candidate_indices), cutoff),
+        )
+    end
+
+    curve = copy(candidates)
+    curve.objective = full_objective
+    curve.statistic = full_statistic
+    curve.estimated_set =
+        markets .* full_objective .<= log(log(markets))
+    curve.confidence_set = full_statistic .<= cutoff
+
+    return (
+        curve = curve,
+        critical_values = critical_values,
+        final_critical_value = cutoff,
+    )
+end
+
+example_inference = subsampling_confidence_region(
+    data = example_data,
+    X_cells = X_cells,
+    candidates = candidates,
+    bounds_grid = bounds_grid,
+    confidence_level = settings.confidence_level,
+    subsample_markets = settings.subsample_markets,
+    subsamples = settings.subsamples,
+    iterations = settings.inference_iterations,
+    rng = MersenneTwister(settings.example_subsample_seed),
+)
+```
+
+```{julia}
+example_inference.critical_values
+```
+
+```{julia}
+projection_summary(
+    candidates = candidates,
+    retained = example_inference.curve.confidence_set,
+    truth = settings.true_theta,
+)
+```
+
+- The confidence region contains joint four-dimensional parameter vectors.
+- Its panels show projections, not four separate confidence intervals.
+
+```{julia}
+confidence_candidates = example_inference.curve[
+    example_inference.curve.confidence_set,
+    :,
+]
+confidence_projection_figures = [
+    identified_projection_plot(
+        identified = confidence_candidates,
+        x_name = pair[1],
+        y_name = pair[2],
+        truth = settings.true_theta,
+        labels = parameter_labels,
+    )
+    for pair in parameter_pairs
+]
+
+plot(
+    confidence_projection_figures...;
+    layout = (2, 3),
+    size = (1_050, 650),
+)
+```
+
+- The region collects candidate vectors that the sample cannot reject.
+- It targets coverage of the true parameter in the identified set.
+- The estimated set and confidence region use different cutoffs and need not be nested.
+
+
+## 7. Run a counterfactual analysis
+
+- Define the counterfactual scenario.
+- Solve the model under the counterfactual scenario.
+- Compare the counterfactual outcome with the baseline outcome.
+
+### Remarks
+
+- Because the true parameters are known, the true counterfactual effect is also known.
+- Make an apples-to-apples comparison.
+  - Compare the counterfactual model with the baseline model at the same parameter vector, not with the observed data.
+- Choose an inference method for the counterfactual.
+  - A regular point estimator may use the delta method or a parametric or nonparametric bootstrap.
+  - A set estimator maps the joint parameter region into the counterfactual.
+  - Do not combine endpoints from separate one-dimensional parameter intervals.
+
+
+### Example: The Two-Firm Entry Model
+
+- A subsidy adds $\tau=0.15$ only to firm 2's entry profit:
+
+$$
+\begin{aligned}
+Y_{1m}
+&=1\left[
+X_m\beta_1-\delta_2Y_{2m}+\varepsilon_{1m}\geq0
+\right],\\
+Y_{2m}
+&=1\left[
+X_m\beta_2+\tau-\delta_1Y_{1m}+\varepsilon_{2m}\geq0
+\right].
+\end{aligned}
+$$
+
+- We report two layers.
+  - The known DGP uses uniform equilibrium selection and gives one probability change for each market structure.
+  - The estimator leaves selection unspecified and reports changes in probability bounds.
+- A change in a probability bound is not a bound on the policy effect.
+  - A policy-effect bound requires an assumption linking selection before and after the policy.
+- No entry is selection free because its lower and upper bounds coincide:
+
+$$
+p_{00}(x;\theta,\tau)
+=\Phi(-\beta_1x)\Phi(-\beta_2x-\tau).
+$$
+
+```{julia}
+#| code-fold: true
+
+function aggregate_outcome_probabilities(; probabilities, cell_weights)
+    weighted = reshape(cell_weights, :, 1) .* probabilities
+    return vec(sum(weighted; dims = 1))
+end
+
+function aggregate_outcome_bounds(; bounds, cell_weights)
+    return (
+        lower = aggregate_outcome_probabilities(
+            probabilities = bounds.lower,
+            cell_weights = cell_weights,
+        ),
+        upper = aggregate_outcome_probabilities(
+            probabilities = bounds.upper,
+            cell_weights = cell_weights,
+        ),
+    )
+end
+
+function no_entry_probability(; bounds, cell_weights)
+    maximum(abs.(bounds.lower[:, 1] .- bounds.upper[:, 1])) <= 1e-12 ||
+        error("No-entry probability is not point identified.")
+    return sum(cell_weights .* bounds.lower[:, 1])
+end
+
+function counterfactual_curve(;
+    candidates,
+    baseline_bounds,
+    policy_bounds,
+    cell_weights,
+)
+    curve = copy(candidates)
+    curve.baseline_no_entry = zeros(nrow(candidates))
+    curve.policy_no_entry = zeros(nrow(candidates))
+    curve.effect = zeros(nrow(candidates))
+
+    for index in 1:nrow(candidates)
+        baseline_probability = no_entry_probability(
+            bounds = baseline_bounds[index],
+            cell_weights = cell_weights,
+        )
+        policy_probability = no_entry_probability(
+            bounds = policy_bounds[index],
+            cell_weights = cell_weights,
+        )
+        curve.baseline_no_entry[index] = baseline_probability
+        curve.policy_no_entry[index] = policy_probability
+        curve.effect[index] = policy_probability - baseline_probability
+    end
+    return curve
+end
+
+function effect_range(; policy_curve, retained)
+    any(retained) ||
+        return (empty = true, lower = NaN, upper = NaN, width = NaN)
+    effects = policy_curve.effect[retained]
+    return (
+        empty = false,
+        lower = minimum(effects),
+        upper = maximum(effects),
+        width = maximum(effects) - minimum(effects),
+    )
+end
+
+function bound_change_ranges(;
+    baseline_bounds,
+    policy_bounds,
+    cell_weights,
+    retained,
+)
+    indices = findall(retained)
+    isempty(indices) && error("The retained set is empty.")
+    rows = NamedTuple[]
+
+    for outcome in 1:4
+        for bound_name in (:lower, :upper)
+            changes = [
+                100 * sum(
+                    cell_weights .* (
+                        getproperty(policy_bounds[index], bound_name)[:, outcome] .-
+                        getproperty(baseline_bounds[index], bound_name)[:, outcome]
+                    )
+                )
+                for index in indices
+            ]
+            push!(
+                rows,
+                (
+                    outcome = ["(0,0)", "(1,0)", "(0,1)", "(1,1)"][outcome],
+                    probability_bound = String(bound_name),
+                    lower_pp = minimum(changes),
+                    upper_pp = maximum(changes),
+                ),
+            )
+        end
+    end
+    return DataFrame(rows)
+end
+
+policy_bounds_grid = bounds_over_candidates(
+    candidates = candidates,
+    X_cells = X_cells,
+    firm2_entry_subsidy = settings.firm2_entry_subsidy,
+)
+policy_curve = counterfactual_curve(
+    candidates = candidates,
+    baseline_bounds = bounds_grid,
+    policy_bounds = policy_bounds_grid,
+    cell_weights = population_weights,
+)
+
+true_policy_bounds = policy_bounds_grid[true_index]
+true_policy_probabilities = uniform_selection_probabilities(
+    bounds = true_policy_bounds,
+)
+baseline_dgp_probabilities = aggregate_outcome_probabilities(
+    probabilities = population_probabilities,
+    cell_weights = population_weights,
+)
+policy_dgp_probabilities = aggregate_outcome_probabilities(
+    probabilities = true_policy_probabilities,
+    cell_weights = population_weights,
+)
+
+dgp_market_structure_changes = DataFrame(
+    market_structure = ["(0,0)", "(1,0)", "(0,1)", "(1,1)"],
+    change_percentage_points = 100 .* (
+        policy_dgp_probabilities .- baseline_dgp_probabilities
+    ),
+)
+
+function entry_measures(probabilities)
+    return [
+        probabilities[2] + probabilities[4],
+        probabilities[3] + probabilities[4],
+        1 - probabilities[1],
+    ]
+end
+
+entry_measure_changes = 100 .* (
+    entry_measures(policy_dgp_probabilities) .-
+    entry_measures(baseline_dgp_probabilities)
+)
+```
+
+- Under the DGP's uniform rule, the subsidy raises firm 2's entry probability and displaces some firm 1 entry.
+
+```{julia}
+#| code-fold: true
+
+function signed_bar_panel(; labels, values, title, x_limits)
+    display_values = reverse(values)
+    display_labels = reverse(labels)
+    colors = [value >= 0 ? :steelblue : :darkorange for value in display_values]
+    figure = bar(
+        display_values;
+        orientation = :h,
+        yticks = (1:length(display_labels), display_labels),
+        color = colors,
+        linecolor = colors,
+        xlabel = "Change (percentage points)",
+        title = title,
+        xlims = x_limits,
+        legend = false,
+    )
+    vline!(figure, [0.0]; color = :gray50, linewidth = 1)
+    for (row, value) in enumerate(display_values)
+        sign = value > 0 ? "+" : ""
+        annotate!(
+            figure,
+            value / 2,
+            row,
+            text("$(sign)$(round(value; digits = 2)) pp", 8, :white),
+        )
+    end
+    return figure
+end
+
+dgp_market_structure_plot = signed_bar_panel(
+    labels = [
+        "No entry (0,0)",
+        "Firm 1 only (1,0)",
+        "Firm 2 only (0,1)",
+        "Both enter (1,1)",
+    ],
+    values = dgp_market_structure_changes.change_percentage_points,
+    title = "A. Market structures",
+    x_limits = (-4.0, 4.0),
+)
+dgp_entry_plot = signed_bar_panel(
+    labels = ["Firm 1 entry", "Firm 2 entry", "Any entry"],
+    values = entry_measure_changes,
+    title = "B. Entry probabilities",
+    x_limits = (-6.0, 6.0),
+)
+
+plot(
+    dgp_market_structure_plot,
+    dgp_entry_plot;
+    layout = (1, 2),
+    size = (1_050, 460),
+    plot_title = "DGP truth under uniform equilibrium selection",
+)
+```
+
+- Firm 2's entry probability rises by about 5.01 percentage points.
+- Firm 1's entry probability falls by about 1.38 percentage points.
+- The probability of any entry rises by about 1.99 percentage points.
+- These statements use the DGP's selection rule.
+
+```{julia}
+#| code-fold: true
+
+true_bound_changes = bound_change_ranges(
+    baseline_bounds = bounds_grid,
+    policy_bounds = policy_bounds_grid,
+    cell_weights = population_weights,
+    retained = eachindex(policy_bounds_grid) .== true_index,
+)
+rename!(
+    true_bound_changes,
+    :lower_pp => :truth_parameter_change_pp,
+)
+select!(
+    true_bound_changes,
+    :outcome,
+    :probability_bound,
+    :truth_parameter_change_pp,
+)
+
+estimated_bound_changes = bound_change_ranges(
+    baseline_bounds = bounds_grid,
+    policy_bounds = policy_bounds_grid,
+    cell_weights = population_weights,
+    retained = example_inference.curve.estimated_set,
+)
+rename!(
+    estimated_bound_changes,
+    :lower_pp => :estimated_lower_pp,
+    :upper_pp => :estimated_upper_pp,
+)
+
+confidence_bound_changes = bound_change_ranges(
+    baseline_bounds = bounds_grid,
+    policy_bounds = policy_bounds_grid,
+    cell_weights = population_weights,
+    retained = example_inference.curve.confidence_set,
+)
+rename!(
+    confidence_bound_changes,
+    :lower_pp => :confidence_lower_pp,
+    :upper_pp => :confidence_upper_pp,
+)
+
+bound_change_summary = innerjoin(
+    true_bound_changes,
+    estimated_bound_changes,
+    confidence_bound_changes;
+    on = [:outcome, :probability_bound],
+)
+
+baseline_aggregate_bounds = aggregate_outcome_bounds(
+    bounds = population_bounds,
+    cell_weights = population_weights,
+)
+policy_aggregate_bounds = aggregate_outcome_bounds(
+    bounds = true_policy_bounds,
+    cell_weights = population_weights,
+)
+
+outcome_labels = [
+    "No entry (0,0)",
+    "Firm 1 only (1,0)",
+    "Firm 2 only (0,1)",
+    "Both enter (1,1)",
+]
+probability_bound_plot = plot(
+    xlabel = "Probability",
+    title = "A. Bounds before and after the subsidy",
+    xlims = (0.0, 0.55),
+    yticks = (1:4, reverse(outcome_labels)),
+    legend = :bottomright,
+)
+
+for (plot_row, outcome) in enumerate(reverse(1:4))
+    baseline_y = plot_row + 0.12
+    policy_y = plot_row - 0.12
+    plot!(
+        probability_bound_plot,
+        [
+            baseline_aggregate_bounds.lower[outcome],
+            baseline_aggregate_bounds.upper[outcome],
+        ],
+        [baseline_y, baseline_y];
+        color = :gray50,
+        linewidth = 4,
+        marker = :circle,
+        markersize = 4,
+        label = plot_row == 1 ? "Baseline" : "",
+    )
+    plot!(
+        probability_bound_plot,
+        [
+            policy_aggregate_bounds.lower[outcome],
+            policy_aggregate_bounds.upper[outcome],
+        ],
+        [policy_y, policy_y];
+        color = :steelblue,
+        linewidth = 4,
+        marker = :diamond,
+        markersize = 4,
+        label = plot_row == 1 ? "Firm 2 subsidy" : "",
+    )
+end
+
+bound_plot_keys = [
+    ("(0,0)", "lower"),
+    ("(1,0)", "lower"),
+    ("(1,0)", "upper"),
+    ("(0,1)", "lower"),
+    ("(0,1)", "upper"),
+    ("(1,1)", "lower"),
+]
+bound_plot_labels = [
+    "No entry: exact",
+    "Firm 1 only: lower",
+    "Firm 1 only: upper",
+    "Firm 2 only: lower",
+    "Firm 2 only: upper",
+    "Both enter: exact",
+]
+bound_plot_rows = [
+    something(findfirst(
+        (bound_change_summary.outcome .== outcome) .&
+        (bound_change_summary.probability_bound .== probability_bound)
+    ))
+    for (outcome, probability_bound) in bound_plot_keys
+]
+bound_change_plot_data = bound_change_summary[bound_plot_rows, :]
+
+bound_change_plot = plot(
+    xlabel = "Change (percentage points)",
+    title = "B. Bound changes across parameter regions",
+    xlims = (-4.2, 4.6),
+    yticks = (1:6, reverse(bound_plot_labels)),
+    legend = :topright,
+)
+vline!(bound_change_plot, [0.0]; color = :gray50, linewidth = 1, label = "")
+
+for (plot_row, index) in enumerate(reverse(1:nrow(bound_change_plot_data)))
+    plot!(
+        bound_change_plot,
+        [
+            bound_change_plot_data.confidence_lower_pp[index],
+            bound_change_plot_data.confidence_upper_pp[index],
+        ],
+        [plot_row, plot_row];
+        color = :steelblue,
+        alpha = 0.25,
+        linewidth = 9,
+        label = plot_row == 1 ? "95% parameter region" : "",
+    )
+    plot!(
+        bound_change_plot,
+        [
+            bound_change_plot_data.estimated_lower_pp[index],
+            bound_change_plot_data.estimated_upper_pp[index],
+        ],
+        [plot_row, plot_row];
+        color = :steelblue,
+        linewidth = 4,
+        label = plot_row == 1 ? "Estimated set" : "",
+    )
+    scatter!(
+        bound_change_plot,
+        [bound_change_plot_data.truth_parameter_change_pp[index]],
+        [plot_row];
+        color = :red,
+        marker = :star5,
+        markersize = 7,
+        label = plot_row == 1 ? "Truth" : "",
+    )
+end
+
+plot(
+    probability_bound_plot,
+    bound_change_plot;
+    layout = (1, 2),
+    size = (1_150, 510),
+    plot_title = "Counterfactual probability bounds",
+)
+```
+
+- Panel A compares the probability bounds before and after the subsidy.
+- Panel B maps the estimated set and confidence region into changes in those bounds.
+- The four-dimensional confidence region is
+
+$$
+\widehat C_{\theta,G}
+=
+\left\{
+\theta_g:T_n(\theta_g)\leq\widehat c_{1-\alpha}
+\right\}.
+$$
+
+- For a counterfactual $g(\theta)$, report
+
+$$
+\left[
+\min_{\theta_g\in\widehat C_{\theta,G}}g(\theta_g),
+\quad
+\max_{\theta_g\in\widehat C_{\theta,G}}g(\theta_g)
+\right].
+$$
+
+- This mapping preserves dependence among $\beta_1$, $\beta_2$, $\delta_1$, and $\delta_2$.
+- It never recombines incompatible endpoints from marginal projections.
+
+```{julia}
+true_policy_effect = policy_curve.effect[true_index]
+estimated_effect_range = effect_range(
+    policy_curve = policy_curve,
+    retained = example_inference.curve.estimated_set,
+)
+confidence_effect_range = effect_range(
+    policy_curve = policy_curve,
+    retained = example_inference.curve.confidence_set,
+)
+
+DataFrame(
+    result = ["Truth", "Estimated set", "95% confidence region"],
+    lower = [
+        true_policy_effect,
+        estimated_effect_range.lower,
+        confidence_effect_range.lower,
+    ],
+    upper = [
+        true_policy_effect,
+        estimated_effect_range.upper,
+        confidence_effect_range.upper,
+    ],
+)
+```
+
+- The no-entry effect is selection free and remains the formal coverage target.
+- Richer market-structure changes depend on how equilibrium selection responds to the policy.
+
+```{julia}
+#| code-fold: true
+
+function monte_carlo_replication(;
+    replication,
+    settings,
+    profiles,
+    X_cells,
+    candidates,
+    bounds_grid,
+    policy_curve,
+    true_index,
+    true_policy_effect,
+)
+    started_at = time_ns()
+    try
+        data = simulate_markets(
+            rng = MersenneTwister(
+                settings.monte_carlo_data_seed + replication
+            ),
+            markets = settings.sample_markets,
+            theta = settings.true_theta,
+            profiles = profiles,
+        )
+        inference = subsampling_confidence_region(
+            data = data,
+            X_cells = X_cells,
+            candidates = candidates,
+            bounds_grid = bounds_grid,
+            confidence_level = settings.confidence_level,
+            subsample_markets = settings.subsample_markets,
+            subsamples = settings.subsamples,
+            iterations = settings.inference_iterations,
+            rng = MersenneTwister(
+                settings.monte_carlo_subsample_seed + replication
+            ),
+        )
+        estimated = inference.curve.estimated_set
+        confidence = inference.curve.confidence_set
+        policy_range = effect_range(
+            policy_curve = policy_curve,
+            retained = confidence,
+        )
+        policy_covered =
+            !policy_range.empty &&
+            policy_range.lower <= true_policy_effect <= policy_range.upper
+
+        return (
+            replication = replication,
+            numerical_success = true,
+            estimated_set_contains_truth = estimated[true_index],
+            parameter_covered = confidence[true_index],
+            counterfactual_covered = policy_covered,
+            estimated_grid_points = count(estimated),
+            confidence_grid_points = count(confidence),
+            counterfactual_range_width = policy_range.width,
+            multiplicity_rate = mean(data.equilibrium_count_dgp .> 1),
+            critical_value = inference.final_critical_value,
+            runtime_seconds = (time_ns() - started_at) / 1e9,
+            failure_reason = "",
+        )
+    catch error
+        return (
+            replication = replication,
+            numerical_success = false,
+            estimated_set_contains_truth = false,
+            parameter_covered = false,
+            counterfactual_covered = false,
+            estimated_grid_points = 0,
+            confidence_grid_points = 0,
+            counterfactual_range_width = NaN,
+            multiplicity_rate = NaN,
+            critical_value = NaN,
+            runtime_seconds = (time_ns() - started_at) / 1e9,
+            failure_reason = sprint(showerror, error),
+        )
+    end
+end
+
+function run_monte_carlo(;
+    settings,
+    profiles,
+    X_cells,
+    candidates,
+    bounds_grid,
+    policy_curve,
+    true_index,
+    true_policy_effect,
+)
+    rows = [
+        monte_carlo_replication(
+            replication = replication,
+            settings = settings,
+            profiles = profiles,
+            X_cells = X_cells,
+            candidates = candidates,
+            bounds_grid = bounds_grid,
+            policy_curve = policy_curve,
+            true_index = true_index,
+            true_policy_effect = true_policy_effect,
+        )
+        for replication in 1:settings.replications
+    ]
+    return DataFrame(rows)
+end
+
+function coverage_mcse(; coverage, replications)
+    return sqrt(coverage * (1 - coverage) / replications)
+end
+
+function monte_carlo_summary(; results)
+    successful = results[results.numerical_success, :]
+    replications = nrow(successful)
+    replications > 0 || error("All Monte Carlo replications failed.")
+    parameter_coverage = mean(successful.parameter_covered)
+    counterfactual_coverage = mean(successful.counterfactual_covered)
+
+    return DataFrame(
+        attempted_replications = [nrow(results)],
+        numerical_successes = [replications],
+        estimated_set_truth_inclusion = [
+            mean(successful.estimated_set_contains_truth)
+        ],
+        parameter_coverage = [parameter_coverage],
+        parameter_coverage_mcse = [
+            coverage_mcse(
+                coverage = parameter_coverage,
+                replications = replications,
+            )
+        ],
+        counterfactual_coverage = [counterfactual_coverage],
+        counterfactual_coverage_mcse = [
+            coverage_mcse(
+                coverage = counterfactual_coverage,
+                replications = replications,
+            )
+        ],
+        mean_estimated_grid_points = [
+            mean(successful.estimated_grid_points)
+        ],
+        mean_confidence_grid_points = [
+            mean(successful.confidence_grid_points)
+        ],
+        mean_counterfactual_range_width = [
+            mean(successful.counterfactual_range_width)
+        ],
+        mean_multiplicity_rate = [mean(successful.multiplicity_rate)],
+        mean_runtime_seconds = [mean(successful.runtime_seconds)],
+    )
+end
+```
+
+- The outer loop generates a new dataset, re-estimates the set, reconstructs the confidence region, and maps it into the no-entry counterfactual.
+
+```{julia}
+monte_carlo_started_at = time_ns()
+monte_carlo_results = run_monte_carlo(
+    settings = settings,
+    profiles = profiles,
+    X_cells = X_cells,
+    candidates = candidates,
+    bounds_grid = bounds_grid,
+    policy_curve = policy_curve,
+    true_index = true_index,
+    true_policy_effect = true_policy_effect,
+)
+monte_carlo_runtime_seconds =
+    (time_ns() - monte_carlo_started_at) / 1e9
+
+monte_carlo_table = monte_carlo_summary(results = monte_carlo_results)
+monte_carlo_table.total_runtime_seconds .= monte_carlo_runtime_seconds
+monte_carlo_table
+```
+
+```{julia}
+failed_replications = monte_carlo_results[
+    .!monte_carlo_results.numerical_success,
+    :,
+]
+
+if nrow(failed_replications) == 0
+    DataFrame(failure_reason = String[], replications = Int[])
+else
+    combine(
+        groupby(failed_replications, :failure_reason),
+        nrow => :replications,
+    )
+end
+```
+
+- Report numerical success, truth inclusion, coverage with Monte Carlo standard errors, set size, multiplicity, and runtime.
+- In this 100-replication run:
+  - all replications complete numerically;
+  - the mean estimated set contains about 539 of 87,001 grid points;
+  - the mean confidence region contains about 544 grid points;
+  - parameter and counterfactual coverage both equal 1.00;
+  - recent renders take roughly 30--40 seconds on the reference machine.
+- One hundred replications are too few for a precise assessment of tail coverage.
+- A production study should increase both replications and grid resolution.
+
+
+## References
+
+- Ciliberto, Federico, and Elie Tamer. 2009. “Market Structure and Multiple Equilibria in Airline Markets.” *Econometrica* 77 (6): 1791--1828. [https://doi.org/10.3982/ECTA5368](https://doi.org/10.3982/ECTA5368).
+- Chernozhukov, Victor, Han Hong, and Elie Tamer. 2007. “Estimation and Confidence Regions for Parameter Sets in Econometric Models.” *Econometrica* 75 (5): 1243--1284.

@@ -1,0 +1,381 @@
+---
+title: "Day 7 In-class Assignment"
+engine: julia
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: true
+  eval: true
+  warning: false
+  message: false
+---
+
+::: {.callout-note}
+## Submission and grading
+
+- This assignment is graded based on effort. Edit this QMD file and submit it within 24 hours to receive full credit.
+- Make every numerical choice visible in code. Do not submit separate prose answers.
+- You may use AI, but you are responsible for checking dimensions, convergence, and numerical results.
+:::
+
+```{julia}
+using DataFrames
+using FastGaussQuadrature
+using LinearAlgebra
+using Plots
+using Random
+```
+
+## Setting
+
+- This QMD generates one fixed synthetic dataset with 200 markets, three inside products per market, and an outside good.
+- The supplied data-generation code uses a fixed seed, so everyone works with the same sample.
+- After generating the sample, treat it as observed market data. You do not need to modify the data-generating process.
+- Consumer $i$'s utility from product $j$ in market $t$ is
+
+  $$
+  u_{ijt}
+  =
+  \underbrace{\beta_0+\beta_xx_{jt}-\alpha p_{jt}+\xi_{jt}}_{\delta_{jt}}
+  -\sigma p_{jt}\nu_i+\varepsilon_{ijt}.
+  $$
+
+- The only random coefficient is the coefficient on price. Consumer $i$'s price coefficient is $\alpha_i=\alpha+\sigma\nu_i$, so $\sigma$ measures heterogeneity in price sensitivity. The taste variable $\nu_i$ follows a standardized uniform distribution on $[-\sqrt{3},\sqrt{3}]$.
+- The parameter vector is $\theta=(\beta_0,\beta_x,\alpha,\sigma)'$. The first three parameters enter mean utility linearly; $\sigma$ enters shares nonlinearly.
+- The observed variables are shares $s_{jt}$, characteristics $x_{jt}$, prices $p_{jt}$, and the excluded price shifter $w_{jt}$. Neither $\delta_{jt}$ nor $\xi_{jt}$ is observed.
+- Price may be correlated with the unobserved demand shock $\xi_{jt}$. The variable $w_{jt}$ is excluded from utility and will be used as an instrument for price.
+- This assignment separates two ideas:
+  - BLP contraction can reproduce observed shares for every candidate $\sigma$.
+  - IV moment restrictions determine whether the data distinguish among those candidate values.
+
+::: {.callout-tip}
+## How BLP estimation works
+
+- Start with a candidate value of the nonlinear parameter $\sigma$.
+- Given $\sigma$, observed prices, and observed shares, use the BLP contraction to recover the mean utilities $\delta(\sigma)$ that reproduce those shares.
+- Write the recovered structural residual as
+
+  $$
+  \xi(\beta,\sigma)
+  =
+  \delta(\sigma)-X\beta,
+  \qquad
+  X=[1,x,-p].
+  $$
+
+- Use instruments $Z$ constructed from $x$ and $w$ to profile out the linear parameters $\beta=(\beta_0,\beta_x,\alpha)'$.
+- Evaluate the IV moments and GMM objective,
+
+  $$
+  g(\sigma)=\frac{Z'\widehat\xi(\sigma)}{N},
+  \qquad
+  Q(\sigma)=g(\sigma)'Wg(\sigma).
+  $$
+
+- Repeat these steps over a grid of $\sigma$ values. Share inversion occurs before the IV step: shares determine $\delta(\sigma)$ for each candidate, while the instruments determine whether the candidates can be distinguished.
+:::
+
+```{julia}
+settings = (
+    markets = 200,
+    products = 3,
+    population_draws = 10_000,
+    data_seed = 20_260_803,
+    taste_nodes = 11,
+    contraction_tolerance = 1e-11,
+    maximum_iterations = 3_000,
+    truth = [2.0, 1.0, 1.5, 0.25],
+    sigma_grid = range(0.05, 0.45; length = 41),
+)
+```
+
+```{julia}
+#| code-fold: true
+#| code-summary: "Show the supplied data generator"
+#| output: false
+
+# The supplied generator uses Monte Carlo draws to create the fixed sample.
+# Question 1 asks you to write a separate Gauss--Legendre integration routine.
+function generate_assignment_data(; settings)
+    rng = MersenneTwister(settings.data_seed)
+    products = settings.products
+    markets = settings.markets
+
+    x = 0.4 .+ rand(rng, products, markets)
+    w = 2.0 .* rand(rng, products, markets) .- 1.0
+    demand_shock = 0.2 .* randn(rng, products, markets)
+    price_shock = 0.1 .* randn(rng, products, markets)
+    price = (
+        2.7 .+
+        0.4 .* x .+
+        0.5 .* w .+
+        0.8 .* demand_shock .+
+        price_shock
+    )
+
+    beta0, beta_x, alpha, sigma = settings.truth
+    mean_utility = beta0 .+ beta_x .* x .- alpha .* price .+ demand_shock
+    taste_draws = sqrt(3.0) .* (
+        2.0 .* rand(rng, settings.population_draws) .- 1.0
+    )
+
+    inside_share = zeros(products, markets)
+    outside_share = zeros(markets)
+    for market in 1:markets
+        utility = (
+            mean_utility[:, market] .-
+            sigma .* price[:, market] .* transpose(taste_draws)
+        )
+        center = max.(0.0, maximum(utility; dims = 1))
+        inside_exp = exp.(utility .- center)
+        outside_exp = exp.(-center)
+        denominator = outside_exp .+ sum(inside_exp; dims = 1)
+        inside_share[:, market] .= vec(
+            sum(inside_exp ./ denominator; dims = 2) ./
+            settings.population_draws
+        )
+        outside_share[market] = sum(outside_exp ./ denominator) /
+            settings.population_draws
+    end
+
+    @assert minimum(price) > 0.0
+    @assert minimum(inside_share) > 0.0
+    @assert minimum(outside_share) > 0.0
+    @assert maximum(abs.(
+        vec(sum(inside_share; dims = 1)) .+ outside_share .- 1.0
+    )) <= 1e-12
+
+    return DataFrame(
+        market = repeat(1:markets, inner = products),
+        product = repeat(1:products, outer = markets),
+        x = vec(x),
+        w = vec(w),
+        price = vec(price),
+        share = vec(inside_share),
+        outside_share = repeat(outside_share, inner = products),
+    )
+end
+
+market_data = generate_assignment_data(settings = settings)
+```
+
+```{julia}
+function prepare_market_data(data, products)
+    sorted_data = sort(data, [:market, :product])
+    markets = length(unique(sorted_data.market))
+    @assert nrow(sorted_data) == products * markets
+
+    x = reshape(sorted_data.x, products, markets)
+    w = reshape(sorted_data.w, products, markets)
+    price = reshape(sorted_data.price, products, markets)
+    inside_share = reshape(sorted_data.share, products, markets)
+    outside_share_matrix = reshape(
+        sorted_data.outside_share,
+        products,
+        markets,
+    )
+    @assert maximum(
+        outside_share_matrix;
+        dims = 1,
+    ) == minimum(outside_share_matrix; dims = 1)
+    outside_share = vec(outside_share_matrix[1, :])
+    X = hcat(ones(products * markets), vec(x), -vec(price))
+
+    return (
+        products = products,
+        markets = markets,
+        observations = products * markets,
+        x = x,
+        w = w,
+        price = price,
+        inside_share = inside_share,
+        outside_share = outside_share,
+        X = X,
+    )
+end
+
+prepared = prepare_market_data(market_data, settings.products)
+first(market_data, 6)
+```
+
+## Question 1: Integrate shares and write the BLP inner loop
+
+- Conditional on $\nu$, the Type-I extreme-value errors imply
+
+  $$
+  P_{ijt}(\delta_t,\sigma,\nu)
+  =
+  \frac{\exp\{\delta_{jt}-\sigma p_{jt}\nu\}}
+  {1+\sum_{k=1}^{J}\exp\{\delta_{kt}-\sigma p_{kt}\nu\}}.
+  $$
+
+- Integrate over $\nu$ to obtain predicted inside and outside shares:
+
+  $$
+  S_{jt}(\delta_t,\sigma)
+  =
+  \int P_{ijt}(\delta_t,\sigma,\nu)\,dF_\nu(\nu).
+  $$
+
+- Use Gauss--Legendre quadrature. Transform its nodes from $[-1,1]$ to $[-\sqrt{3},\sqrt{3}]$ and normalize its weights to sum to one.
+- Write `standardized_uniform_rule(order)`.
+- Write `mixed_logit_shares(delta, price, sigma, taste_rule)` for $J\times T$ matrices of mean utilities and prices.
+- Make the share calculation numerically stable by subtracting the largest utility before exponentiating.
+
+```{julia}
+# Write standardized_uniform_rule and mixed_logit_shares here.
+```
+
+- For a candidate $\sigma$, BLP inversion recovers the mean utilities that reproduce observed inside shares. Use the contraction mapping
+
+  $$
+  \delta_{jt}^{(h+1)}
+  =
+  \delta_{jt}^{(h)}
+  +\log s_{jt}-\log S_{jt}(\delta_t^{(h)},\sigma).
+  $$
+
+- Write `invert_shares(target_inside, target_outside, price, sigma, taste_rule)`.
+- Apply the update to all markets simultaneously.
+- Return the recovered $\delta$, a convergence indicator, the iteration count, and the final contraction residual.
+- At the true $\sigma$, recompute shares from the recovered $\delta$ and report the largest share error.
+
+```{julia}
+# Write and test invert_shares here.
+```
+
+## Question 2: Show that share fit does not identify $\sigma$
+
+- Repeat the inversion over the entire $\sigma$ grid.
+- For each candidate, recompute predicted shares and record
+
+  $$
+  e_s(\sigma)
+  =
+  \max_{j,t}
+  \left|
+  s_{jt}-S_{jt}(\delta_t(\sigma),\sigma)
+  \right|.
+  $$
+
+- Write `share_fit_diagnostic(sigma, prepared, taste_rule, settings)`.
+- Produce a table reporting convergence and iteration counts over the grid.
+- Plot $e_s(\sigma)$ against $\sigma$. Use a logarithmic vertical axis so that errors near the contraction tolerance remain visible.
+- Store every recovered $\delta(\sigma)$ so that Questions 4 and 5 can reuse the inversions.
+- The plot should show that BLP inversion can fit observed shares for every candidate $\sigma$ by changing $\delta(\sigma)$.
+
+```{julia}
+# Evaluate and plot the share-fit diagnostic here.
+```
+
+## Question 3: Construct nested instrument sets
+
+- Let $Z^{(3)}$ contain the three instruments needed to profile the three linear parameters:
+
+  $$
+  Z^{(3)}=[1,x,w].
+  $$
+
+- Add the sum of rival characteristics and then the sum of squared rival characteristics:
+
+  $$
+  \begin{aligned}
+  Z^{(4)}
+  &=
+  [1,x,w,\text{rival }x],\\
+  Z^{(5)}
+  &=
+  [1,x,w,\text{rival }x,\text{rival }x^2].
+  \end{aligned}
+  $$
+
+- Write `construct_instrument_sets(x, w)` and return all three matrices.
+- Construct the rival variables separately within each market.
+- Display the number of rows, number of columns, and matrix rank for each instrument set.
+- Use the same fixed markets and shares for all three sets.
+
+```{julia}
+# Construct and inspect Z3, Z4, and Z5 here.
+```
+
+## Question 4: Profile the linear parameters and construct GMM
+
+- Use the $\delta(\sigma)$ values recovered in Question 2 and define
+
+  $$
+  A=\frac{Z'X}{N},
+  \qquad
+  b(\sigma)=\frac{Z'\delta(\sigma)}{N},
+  \qquad
+  W=\left(\frac{Z'Z}{N}\right)^{-1}.
+  $$
+
+- Profile the linear coefficients using
+
+  $$
+  \widehat\beta(\sigma)
+  =
+  (A'WA)^{-1}A'Wb(\sigma).
+  $$
+
+- Recover the structural residual and evaluate the sample moments and objective:
+
+  $$
+  \begin{aligned}
+  \widehat\xi(\sigma)
+  &=
+  \delta(\sigma)-X\widehat\beta(\sigma),\\
+  g(\sigma)
+  &=
+  \frac{Z'\widehat\xi(\sigma)}{N},\\
+  Q(\sigma)
+  &=
+  g(\sigma)'Wg(\sigma).
+  \end{aligned}
+  $$
+
+- Write `profiled_gmm(sigma, delta, prepared, Z)`.
+- Return $\widehat\beta$, $\widehat\xi$, $g$, and $Q$.
+- Evaluate the function at the true $\sigma$ for each instrument set and check the dimensions of every returned object.
+
+```{julia}
+# Write and test profiled_gmm here.
+```
+
+## Question 5: Compare identification across instrument sets
+
+- Evaluate `profiled_gmm` over the same $\sigma$ grid for $Z^{(3)}$, $Z^{(4)}$, and $Z^{(5)}$.
+- Plot the three objectives in separate panels because their numerical scales differ.
+- Mark the true $\sigma$ in every panel.
+- Produce a table containing the grid minimum, the objective at the truth, and the largest objective on the grid.
+- Check the following numerical patterns:
+  - With $Z^{(3)}$, the three profiled coefficients can satisfy all three moments at every $\sigma$, so the objective should be numerically zero across the grid.
+  - With $Z^{(4)}$, one additional moment remains after profiling $\beta$, so the objective should select a value of $\sigma$.
+  - With $Z^{(5)}$, a second additional moment checks whether the same value is supported by another restriction.
+
+```{julia}
+# Evaluate, summarize, and plot the three profiled objectives here.
+```
+
+## Optional exercise: Compare Jacobian ranks
+
+::: {.callout-note}
+This exercise is not required for submission. Complete it if you want a local numerical counterpart to the objective-function plots.
+:::
+
+- For each instrument set, evaluate
+
+  $$
+  g(\theta)=\frac{Z'\xi(\theta)}{N}
+  $$
+
+  and approximate its Jacobian using central finite differences.
+- Report the dimensions, singular values, and numerical rank of each Jacobian.
+- Verify that the Jacobian based on $Z^{(3)}$ cannot have rank four because it has only three rows.
+- Check whether the Jacobians based on $Z^{(4)}$ and $Z^{(5)}$ have full column rank.
+
+```{julia}
+# Compute and compare the three Jacobians here.
+```
