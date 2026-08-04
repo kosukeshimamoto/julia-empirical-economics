@@ -1,0 +1,365 @@
+---
+title: "Day 8 In-class Assignment"
+engine: julia
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: true
+  eval: true
+  warning: false
+  message: false
+---
+
+::: {.callout-note}
+## Submission and grading
+
+- This assignment is graded based on effort. Edit this QMD file and submit it within 24 hours to receive full credit.
+- This assignment is self-contained. Use the fixed demand estimates below; do not estimate demand or load a Day 7 file.
+- Make every modeling and numerical choice visible in code. Report the diagnostics for every price solve.
+:::
+
+```{julia}
+using DataFrames
+using Distributions
+using FastGaussQuadrature
+using LinearAlgebra
+using Plots
+using Random
+using Statistics
+```
+
+## Setting
+
+- Each market has three inside goods and an outside good whose utility is normalized to zero.
+- Demand is the price-random-coefficient model from Day 7:
+
+  $$
+  u_{ij}
+  =
+  \underbrace{\beta_0+\beta_xx_j-\alpha p_j+\xi_j}_{\delta_j}
+  -\sigma p_j\nu_i+\varepsilon_{ij}.
+  $$
+
+- Treat the demand estimates and demand functions below as given. Do not re-estimate demand or rewrite the supplied share code.
+- The instructor supplies one fixed estimate from the reference Day 7 sample. Day 8 does not depend on your Day 7 output.
+- The supplied bounded consumer-type distribution satisfies $\widehat\alpha+\widehat\sigma\nu_r>0$ at every integration node.
+- You will choose a DGP and a fixed seed, then generate one market for the merger counterfactual.
+
+```{julia}
+provided_demand_estimates = (
+    beta0 = 2.27179,
+    beta_x = 1.03517,
+    alpha = 1.62480,
+    sigma = 0.343418,
+)
+
+raw_nodes, raw_weights = gausslegendre(15)
+settings = (
+    beta0 = provided_demand_estimates.beta0,
+    beta_x = provided_demand_estimates.beta_x,
+    alpha = provided_demand_estimates.alpha,
+    sigma = provided_demand_estimates.sigma,
+    integration_draws = sqrt(3.0) .* raw_nodes,
+    integration_weights = raw_weights ./ 2.0,
+    costs = ones(3),
+    damping = 0.5,
+    price_tolerance = 1e-10,
+    foc_tolerance = 1e-8,
+    iteration_limit = 3_000,
+)
+
+ownerships = (
+    pre = [1, 2, 3],
+    acquire2 = [1, 1, 3],
+    acquire3 = [1, 2, 1],
+)
+
+@assert minimum(
+    settings.alpha .+ settings.sigma .* settings.integration_draws,
+) > 0.0
+```
+
+### Provided demand and share functions
+
+- The estimated parameters enter the conditional logit share as follows:
+
+  $$
+  P_j(\nu;p)
+  =
+  \frac{\exp(\delta_j-\sigma p_j\nu)}
+  {1+\sum_{\ell=1}^{J}\exp(\delta_\ell-\sigma p_\ell\nu)},
+  \qquad
+  \delta_j=\beta_0+\beta_xx_j-\alpha p_j+\xi_j.
+  $$
+
+- The market share is the integral of the conditional share over consumer types:
+
+  $$
+  s_j(p)=\int P_j(\nu;p)dF_\nu(\nu).
+  $$
+
+- Consumer type $\nu$ has price sensitivity $a(\nu)=\alpha+\sigma\nu$. The supplied function uses the same integration nodes to calculate the price derivative
+
+  $$
+  \frac{\partial s_j(p)}{\partial p_k}
+  =
+  -\int
+  a(\nu)P_j(\nu;p)
+  \{\mathbf 1(j=k)-P_k(\nu;p)\}
+  \,dF_\nu(\nu).
+  $$
+
+- `mean_utility` and `shares_and_price_derivatives` implement these formulas. The second function returns inside shares, the outside share, and $D_{jk}=\partial s_j/\partial p_k$.
+- Run the supplied diagnostic before continuing. It checks that shares add to one and own-price derivatives are negative.
+
+```{julia}
+function mean_utility(prices, x, xi, settings)
+    return (
+        settings.beta0 .+
+        settings.beta_x .* x .-
+        settings.alpha .* prices .+
+        xi
+    )
+end
+```
+
+```{julia}
+function shares_and_price_derivatives(prices, x, xi, settings)
+    products = length(prices)
+    shares = zeros(products)
+    derivative = zeros(products, products)
+    outside_share = 0.0
+    delta = mean_utility(prices, x, xi, settings)
+
+    for (draw, weight) in zip(
+        settings.integration_draws,
+        settings.integration_weights,
+    )
+        utility = delta .- settings.sigma .* prices .* draw
+        shift = max(0.0, maximum(utility))
+        numerator = exp.(utility .- shift)
+        outside_numerator = exp(-shift)
+        denominator = outside_numerator + sum(numerator)
+        conditional_shares = numerator ./ denominator
+        price_sensitivity = settings.alpha + settings.sigma * draw
+
+        shares .+= weight .* conditional_shares
+        outside_share += weight * outside_numerator / denominator
+        derivative .-= (
+            weight * price_sensitivity .* (
+                Diagonal(conditional_shares) -
+                conditional_shares * conditional_shares'
+            )
+        )
+    end
+
+    return (
+        shares = shares,
+        outside_share = outside_share,
+        derivative = derivative,
+    )
+end
+```
+
+```{julia}
+demand_check = shares_and_price_derivatives(
+    [2.0, 2.0, 2.0],
+    [0.4, 0.6, 0.5],
+    zeros(3),
+    settings,
+)
+
+@assert isapprox(
+    sum(demand_check.shares) + demand_check.outside_share,
+    1.0;
+    atol = 1e-12,
+)
+@assert all(diag(demand_check.derivative) .< 0.0)
+
+DataFrame(
+    product = ["1", "2", "3", "Outside"],
+    share = [demand_check.shares; demand_check.outside_share],
+)
+```
+
+## Question 1: Map ownership into Bertrand prices
+
+- The purpose of the ownership matrix is to tell the pricing problem which products belong to the same firm. A merger changes this matrix even though the demand parameters, product characteristics, demand shocks, and marginal costs remain fixed.
+- Let $f(j)$ denote the firm that owns product $j$. The $J\times J$ ownership matrix $H$ is defined by
+
+  $$
+  H_{jk}
+  =
+  \begin{cases}
+  1 & \text{if } f(j)=f(k),\\
+  0 & \text{otherwise}.
+  \end{cases}
+  $$
+
+- Every diagonal entry equals one because a product has the same owner as itself. An off-diagonal entry equals one only when two different products have a common owner. For example,
+
+  $$
+  H^{pre}
+  =
+  \begin{bmatrix}
+  1&0&0\\
+  0&1&0\\
+  0&0&1
+  \end{bmatrix},
+  \qquad
+  H^{1+2}
+  =
+  \begin{bmatrix}
+  1&1&0\\
+  1&1&0\\
+  0&0&1
+  \end{bmatrix}.
+  $$
+
+  Before the merger, each product has a separate owner. After Firm 1 acquires Firm 2, the entries linking products 1 and 2 switch from zero to one.
+- The supplied demand function returns the derivative matrix $D(p)$, where $D_{jk}(p)=\partial s_j(p)/\partial p_k$. It records how the share of product $j$ changes when the price of product $k$ changes.
+- The symbol $\odot$ denotes the **Hadamard product**, or element-by-element multiplication. It is not matrix multiplication:
+
+  $$
+  [H\odot D(p)]_{jk}
+  =
+  H_{jk}D_{jk}(p).
+  $$
+
+  Thus, $H\odot D(p)$ retains a cross-price derivative when products $j$ and $k$ have the same owner and replaces it with zero when they have different owners.
+- A firm chooses the prices of all products it owns to maximize the sum of product-level profits:
+
+  $$
+  \Pi_f(p)
+  =
+  \sum_{j:f(j)=f}(p_j-c_j)s_j(p).
+  $$
+
+- Differentiating the profit of the firm that owns product $k$ with respect to $p_k$ gives
+
+  $$
+  0
+  =
+  \frac{\partial \Pi_{f(k)}}{\partial p_k}
+  =
+  s_k(p)
+  +
+  \sum_{j=1}^{J}
+  H_{jk}(p_j-c_j)D_{jk}(p).
+  $$
+
+  The first term is the direct effect of increasing $p_k$ on product $k$'s margin. The sum captures the resulting share changes for every product owned by the same firm. After a merger, the firm internalizes the effect of one merging product's price on the other merging product's profit.
+- Stacking one first-order condition for each product gives
+
+  $$
+  s(p)+[H\odot D(p)]^{\mathsf T}(p-c)=0.
+  $$
+
+- The transpose appears because row $j$ of $D$ describes the share of product $j$, while column $k$ describes a change in price $p_k$.
+- The equilibrium equation is nonlinear because shares and derivatives depend on prices. For a proposed price vector $p^{(h)}$, first calculate $s(p^{(h)})$ and $D(p^{(h)})$. Holding these objects fixed, rearrange the first-order conditions to obtain the next proposed price vector:
+
+  $$
+  \widetilde p^{(h+1)}
+  =
+  c-\left([H\odot D(p^{(h)})]^{\mathsf T}\right)^{-1}s(p^{(h)}).
+  $$
+
+- Apply damping so that the algorithm moves only part of the way toward the newly implied prices:
+
+  $$
+  p^{(h+1)}
+  =
+  (1-\lambda)p^{(h)}+\lambda\widetilde p^{(h+1)}.
+  $$
+
+  Damping can stabilize the iteration when the undamped price update moves too far.
+- Write `ownership_matrix`, `bertrand_foc`, and `solve_prices`. Use `\` rather than explicitly calculating an inverse.
+- In code, `ownership_matrix` constructs $H$, `bertrand_foc` evaluates the stacked first-order conditions, and `solve_prices` repeats the damped price update until the numerical criteria are satisfied.
+- Return last prices, shares, iteration count, price change, FOC residual, success flag, and failure reason. Check the FOC residual even when price changes are small.
+
+```{julia}
+# Write ownership_matrix and verify the post-merger ownership matrices.
+```
+
+```{julia}
+# Write bertrand_foc.
+```
+
+```{julia}
+# Write the damped solve_prices routine and its numerical checks.
+```
+
+## Question 2: Run a one-market merger counterfactual
+
+- Choose distributions and supports for $x_j$ and $\xi_j$, and choose a fixed seed. Do not select a DGP only because it produces a preferred merger result.
+- Write `simulate_market_primitives(rng)` and use it to draw one $(x,\xi)$ market. Generate the market only once, then reuse the same primitives and costs under all three ownership structures.
+- With market size normalized to one, firm $f$'s operating profit is
+
+  $$
+  \Pi_f(p)=\sum_{j:f(j)=f}(p_j-c_j)s_j(p).
+  $$
+
+- For consumer type $\nu$, divide the log-sum by that type's price sensitivity:
+
+  $$
+  CS(p)
+  =
+  \int
+  \frac{
+  \log\left[1+\sum_j
+  \exp\{\delta_j-\sigma p_j\nu\}\right]
+  }{\alpha+\sigma\nu}
+  \,dF_\nu(\nu),
+  \qquad
+  SW=CS+\sum_f\Pi_f.
+  $$
+
+- Write `firm_profits`, `consumer_surplus`, and `market_outcome`.
+- Solve the pre-merger equilibrium, acquisition 1+2, and acquisition 1+3.
+- Start each post-merger solve from the pre-merger prices.
+- Plot the three product prices under all three ownership scenarios.
+- For target $k\in\{2,3\}$, calculate
+
+  $$
+  G_{1k}=\Pi_{1+k}^{post}-(\Pi_1^{pre}+\Pi_k^{pre}),
+  $$
+
+  together with changes in consumer surplus and social welfare.
+- For each acquisition, also calculate the changes in total industry profit, consumer surplus, and social welfare relative to the pre-merger equilibrium.
+- Make a grouped bar plot comparing these three changes across the two acquisitions. Add a horizontal line at zero so that gains and losses are visible.
+
+```{julia}
+# Choose distributions, supports, and a fixed seed. Write
+# simulate_market_primitives and generate one market.
+```
+
+```{julia}
+# Write firm_profits and consumer_surplus.
+```
+
+```{julia}
+# Write market_outcome.
+```
+
+```{julia}
+# Solve all three ownership scenarios using the same generated market.
+```
+
+```{julia}
+# Report solver diagnostics and plot equilibrium prices by scenario.
+```
+
+```{julia}
+# Compute private gains and the changes in total industry profit,
+# consumer surplus, and social welfare.
+```
+
+```{julia}
+# Plot both acquisitions' changes in total industry profit,
+# consumer surplus, and social welfare relative to pre-merger outcomes.
+```
+
+- This is a counterfactual for one generated market, not a population estimate.
+- A small FOC residual supports a stationary-price solution; it does not establish a global profit maximum.
