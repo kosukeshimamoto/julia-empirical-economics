@@ -19,8 +19,7 @@
   - Monte Carlo Simulation for Structural Estimation
   - In-class assignment: BLP
 - Day 8 (Tue, Aug 4)
-  - Numerical methods in economics 2
-  - Demo 3: TBA
+  - Monte Carlo Simulation for Structural Estimation (Cont)
+  - Duke Computer Cluster
 - Day 9 (Thu, Aug 6)
-  - Computer cluster
-  - Demo 4: final project
+  - Demo: final project
