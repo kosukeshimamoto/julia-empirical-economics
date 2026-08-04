@@ -16,12 +16,15 @@ project:
     - lectures/computational-techniques-2.html
     - lectures/demo_ddc.html
     - lectures/monte-carlo-structural-estimation.html
+    - lectures/duke_computer_cluster.html
     - assignments/inclass-assignment/day1-assignment.qmd
     - assignments/inclass-assignment/html/day1-assignment.html
     - assignments/inclass-assignment/day6-assignment.qmd
     - assignments/inclass-assignment/html/day6-assignment.html
     - assignments/inclass-assignment/day7-assignment.qmd
     - assignments/inclass-assignment/html/day7-assignment.html
+    - assignments/inclass-assignment/day8-assignment.qmd
+    - assignments/inclass-assignment/html/day8-assignment.html
     - assignments/weekly-assignment/weekly-assignment1.qmd
     - assignments/weekly-assignment/weekly-assignment2.qmd
 

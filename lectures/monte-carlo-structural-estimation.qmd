@@ -1355,8 +1355,10 @@ combine(
 
 ### Remarks
 
-- Check the shape of the objective function before estimation.
-  - If the objective function does not have the expected shape, estimation will fail.
+- We should check the shape of the objective function at first.
+  - One-dimensional slices reveal local curvature around a reference point.
+  - Two-dimensional profiles reveal ridges, flat regions, and parameter dependence.
+- If the parameters are set-identified, we should also check the identified set via grid search.
 - When using an optimizer, do not place every initial value close to the true parameter vector.
 
 ### Example: The Two-Firm Entry Model
@@ -1367,6 +1369,22 @@ $$
 \widehat p_y(x)=\widehat{\Pr}(Y=y\mid X=x).
 $$
 
+- The sample objective is
+
+$$
+Q_n(\theta)
+=
+\sum_{x\in\{0,1\}}\widehat{\Pr}(X=x)
+\sum_y
+\left\{
+[L_y(x;\theta)-\widehat p_y(x)]_+^2
++[\widehat p_y(x)-U_y(x;\theta)]_+^2
+\right\},
+$$
+
+where $[a]_+=\max\{a,0\}$.
+
+- The objective is zero only when every estimated outcome probability lies within its model-implied bounds.
 - The estimated set is
 
 $$
@@ -1443,6 +1461,167 @@ example_curve.estimated_set =
     example_curve.scaled_objective .<= log(log(settings.sample_markets))
 ```
 
+- First, vary one parameter at a time around its true value and hold the other three parameters at their true values.
+- These plots are one-dimensional slices, not profiled objectives.
+
+```{julia}
+#| label: fig-sample-objective-slices
+#| fig-cap: "One-dimensional slices of the sample objective around the true parameter vector."
+
+function objective_slice(; curve, parameter, truth)
+    other_parameters = setdiff(
+        [:beta1, :beta2, :delta1, :delta2],
+        [parameter],
+    )
+    retained = trues(nrow(curve))
+    for other_parameter in other_parameters
+        retained .&= isapprox.(
+            curve[!, other_parameter],
+            getproperty(truth, other_parameter),
+        )
+    end
+    truth_value = getproperty(truth, parameter)
+    retained .&= curve[!, parameter] .>= 0.5 * truth_value
+    retained .&= curve[!, parameter] .<= 1.5 * truth_value
+    slice = curve[retained, [parameter, :scaled_objective]]
+    sort!(slice, parameter)
+    return slice
+end
+
+objective_slice_figures = [
+    let
+        slice = objective_slice(
+            curve = example_curve,
+            parameter = parameter,
+            truth = settings.true_theta,
+        )
+        figure = plot(
+            slice[!, parameter],
+            slice.scaled_objective;
+            xlabel = parameter_labels[parameter],
+            ylabel = raw"$nQ_n(\theta)$",
+            title = String(parameter),
+            color = :steelblue,
+            linewidth = 2.5,
+            marker = :circle,
+            markersize = 3,
+            legend = false,
+        )
+        vline!(
+            figure,
+            [getproperty(settings.true_theta, parameter)];
+            color = :red,
+            linestyle = :dash,
+            linewidth = 2,
+        )
+        figure
+    end
+    for parameter in (:beta1, :beta2, :delta1, :delta2)
+]
+
+plot(
+    objective_slice_figures...;
+    layout = (2, 2),
+    size = (900, 650),
+)
+```
+
+- Next, profile the objective over $(\delta_1,\delta_2)$ and plot it on the $(\beta_1,\beta_2)$ plane.
+- The red star marks the true parameter vector.
+- The white diamond marks the grid minimizer.
+- The solid contour marks the estimated-set cutoff.
+
+```{julia}
+#| label: fig-sample-objective-profile
+#| fig-cap: "Sample objective profiled over the competitive-effect parameters."
+
+function profiled_objective_surface(; curve, x_name, y_name)
+    x_values = sort(unique(curve[!, x_name]))
+    y_values = sort(unique(curve[!, y_name]))
+    surface = [
+        minimum(curve[
+            (curve[!, x_name] .== x) .&
+            (curve[!, y_name] .== y),
+            :scaled_objective,
+        ])
+        for y in y_values, x in x_values
+    ]
+    return (x = x_values, y = y_values, z = surface)
+end
+
+example_profile = profiled_objective_surface(
+    curve = example_curve,
+    x_name = :beta1,
+    y_name = :beta2,
+)
+example_minimum_index = argmin(example_curve.objective)
+example_minimizer = example_curve[example_minimum_index, :]
+estimated_set_cutoff = log(log(settings.sample_markets))
+example_profile_log_objective = log10.(example_profile.z .+ 1e-8)
+
+sample_objective_profile_plot = heatmap(
+    example_profile.x,
+    example_profile.y,
+    example_profile_log_objective;
+    xlabel = raw"$\beta_1$",
+    ylabel = raw"$\beta_2$",
+    colorbar_title = raw"$\log_{10}(nQ_n)$",
+    title = raw"Profile over $(\delta_1,\delta_2)$",
+    c = :viridis,
+    clims = extrema(example_profile_log_objective),
+    colorbar = true,
+)
+contour!(
+    sample_objective_profile_plot,
+    example_profile.x,
+    example_profile.y,
+    example_profile_log_objective;
+    levels = [log10(estimated_set_cutoff + 1e-8)],
+    color = :white,
+    linewidth = 2,
+)
+scatter!(
+    sample_objective_profile_plot,
+    [settings.true_theta.beta1],
+    [settings.true_theta.beta2];
+    color = :red,
+    marker = :star5,
+    markersize = 8,
+    label = "Truth",
+)
+scatter!(
+    sample_objective_profile_plot,
+    [example_minimizer.beta1],
+    [example_minimizer.beta2];
+    color = :white,
+    marker = :diamond,
+    markerstrokecolor = :black,
+    markersize = 6,
+    label = "Grid minimizer",
+)
+sample_objective_profile_plot
+```
+
+- After inspecting the objective function, report the grid minimizer and the estimated set.
+
+```{julia}
+DataFrame(
+    parameter = ["beta1", "beta2", "delta1", "delta2"],
+    truth = [
+        settings.true_theta.beta1,
+        settings.true_theta.beta2,
+        settings.true_theta.delta1,
+        settings.true_theta.delta2,
+    ],
+    objective_minimizer = [
+        example_minimizer.beta1,
+        example_minimizer.beta2,
+        example_minimizer.delta1,
+        example_minimizer.delta2,
+    ],
+)
+```
+
 ```{julia}
 DataFrame(
     Q_n_at_truth = [example_curve.objective[true_index]],
@@ -1459,6 +1638,7 @@ projection_summary(
 )
 ```
 
+- The objective minimizer is one numerical representative, not the estimated set.
 - The next panels project the four-dimensional estimated set onto every parameter pair.
 - The shaded convex hull summarizes projected grid points; it is not the set itself.
 
@@ -1493,13 +1673,16 @@ plot(
 
 ### Remarks
 
-- The appropriate method depends on the model.
-- When resampling, first choose the resampling unit.
-- For a regular point-identified model without an analytical asymptotic variance, a bootstrap may be sufficient.
-- For a set-identified model, use a procedure designed to construct a confidence region for a parameter set.
+- If analytial asymptotic variance is available, we can just use it.
+- For a point-identified model without an analytical asymptotic variance, a bootstrap may be sufficient in most cases.
+  - But we have to be careful which the resampling unit is.
+- An ordinary bootstrap is not automatically valid for a set-identified model.
+  - Check the literature: Andrews and Soares (2010), Andrews and Shi (2013)
 
 ### Example: The Two-Firm Entry Model
 
+- Ciliberto and Tamer (2009) construct a region that covers the true but potentially non-point-identified parameter $\theta_I\in\Theta_I$.
+- The region collects joint parameter vectors that the sample cannot reject.
 - Markets are independent sampling units.
 - Subsampling draws markets without replacement.
 - The subsample size is
@@ -1509,15 +1692,51 @@ b_n=\operatorname{round}(n^{0.8})=910.
 $$
 
 - Each dataset uses 99 subsamples and two cutoff updates.
-- The test statistic is
 
-$$
-T_n(\theta)
-=
-n\left[
-Q_n(\theta)-\min_{t\in\Theta}Q_n(t)
-\right].
-$$
+::: {.callout-note title="Ciliberto and Tamer (2009): Confidence-region algorithm"}
+1. **Compute the full-sample statistic.**
+
+   $$
+   \widehat Q_{n,\min}=\min_{t\in\Theta}Q_n(t),
+   \qquad
+   T_n(\theta)=n\left[Q_n(\theta)-\widehat Q_{n,\min}\right].
+   $$
+
+2. **Initialize the region.**
+
+   $$
+   C_n(c_0)=\{\theta:T_n(\theta)\leq c_0\},
+   \qquad c_0=0,
+   $$
+
+   using a small numerical tolerance in practice.
+
+3. **Re-estimate in each subsample.** Draw subsamples $j=1,\ldots,99$ without replacement. Re-estimate the conditional outcome probabilities and compute
+
+   $$
+   T_{b,j}(\theta)
+   =b\left[Q_{b,j}(\theta)-\min_{t\in\Theta}Q_{b,j}(t)\right].
+   $$
+
+4. **Compute pointwise critical values.** For each candidate in the current region, calculate
+
+   $$
+   \widehat c_{.95}(\theta)
+   =\operatorname{Quantile}_{.95}
+   \left\{T_{b,j}(\theta)\right\}_{j=1}^{99}.
+   $$
+
+5. **Update the joint region twice.** For $k=0,1$, set
+
+   $$
+   c_{k+1}
+   =\sup_{\theta\in C_n(c_k)}\widehat c_{.95}(\theta),
+   \qquad
+   C_n(c_{k+1})=\{\theta:T_n(\theta)\leq c_{k+1}\}.
+   $$
+
+   Report $C_n(c_2)$ as the joint confidence region.
+:::
 
 ```{julia}
 #| code-fold: true
@@ -1677,10 +1896,67 @@ plot(
 - Because the true parameters are known, the true counterfactual effect is also known.
 - Make an apples-to-apples comparison.
   - Compare the counterfactual model with the baseline model at the same parameter vector, not with the observed data.
-- Choose an inference method for the counterfactual.
-  - A regular point estimator may use the delta method or a parametric or nonparametric bootstrap.
-  - A set estimator maps the joint parameter region into the counterfactual.
+- **Approach 1: Map a joint parameter region $C_\theta$ into the counterfactual.**
+  - This is the simplest approach and applies to both point-identified and set-identified models.
+
+$$
+\left[
+\min_{\theta\in C_\theta}g(\theta),
+\quad
+\max_{\theta\in C_\theta}g(\theta)
+\right].
+$$
+
+  - Mapping an estimated set gives a sensitivity range, not a formal confidence interval.
+  - Mapping a valid joint confidence region gives a potentially conservative confidence interval when $g(\theta)$ is uniquely defined.
   - Do not combine endpoints from separate one-dimensional parameter intervals.
+- **Approach 2: Apply the delta method.**
+  - For a regular point estimator, the delta method targets the sampling uncertainty of $g(\widehat\theta)$.
+  - Start from a multivariate estimator:
+
+$$
+\sqrt n(\widehat\theta-\theta_0)
+\overset{d}{\longrightarrow}
+N(0,V_\theta),
+\qquad
+\theta\in\mathbb R^K.
+$$
+
+  - For a differentiable scalar counterfactual $g(\theta)$, a first-order approximation gives
+
+$$
+\sqrt n\left[g(\widehat\theta)-g(\theta_0)\right]
+\overset{d}{\longrightarrow}
+N\left(
+0,
+\nabla g(\theta_0)'V_\theta\nabla g(\theta_0)
+\right).
+$$
+
+  - Estimate its standard error by replacing the unknown objects with their estimates:
+
+$$
+\widehat{\operatorname{SE}}\left[g(\widehat\theta)\right]
+=
+\sqrt{
+\frac{1}{n}
+\nabla g(\widehat\theta)'
+\widehat V_\theta
+\nabla g(\widehat\theta)
+}.
+$$
+
+- **Approach 3: Use a parametric bootstrap.**
+  1. Estimate the model.
+  2. Generate a bootstrap dataset from the fitted DGP.
+  3. Re-estimate the model and recompute the counterfactual.
+  4. Repeat the procedure and use the bootstrap distribution for inference.
+- **Approach 4: Use a nonparametric bootstrap.**
+  1. Resample the original sampling units with replacement.
+  2. Re-estimate the model in each resampled dataset.
+  3. Recompute the counterfactual.
+  4. Repeat the procedure and use the bootstrap distribution for inference.
+- These methods do not by themselves resolve uncertainty about equilibrium selection.
 
 
 ### Example: The Two-Firm Entry Model
@@ -1703,6 +1979,8 @@ $$
 - We report two layers.
   - The known DGP uses uniform equilibrium selection and gives one probability change for each market structure.
   - The estimator leaves selection unspecified and reports changes in probability bounds.
+- Following Ciliberto and Tamer (2009), report the result at the objective minimizer and the minimum and maximum over the estimated set.
+- This note also maps the joint confidence region into the counterfactual.
 - A change in a probability bound is not a bound on the policy effect.
   - A policy-effect bound requires an assumption linking selection before and after the policy.
 - No entry is selection free because its lower and upper bounds coincide:

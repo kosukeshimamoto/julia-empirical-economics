@@ -22,7 +22,8 @@
   - Monte Carlo Simulation for Structural Estimation [&#91;HTML&#93;](/lectures/monte-carlo-structural-estimation.html)
   - In-class Assignment: BLP [&#91;qmd&#93;](/assignments/inclass-assignment/day7-assignment.qmd) [&#91;HTML&#93;](/assignments/inclass-assignment/html/day7-assignment.html)
 - Day 8 (Tue, Aug 4)
-  - Monte Carlo Simulation for Structural Estimation (Cont)
-  - Duke Computer Cluster
+  - Monte Carlo Simulation for Structural Estimation (Cont) [&#91;HTML&#93;](/lectures/monte-carlo-structural-estimation.html)
+  - Duke Computer Cluster [&#91;HTML&#93;](/lectures/duke_computer_cluster.html)
+  - In-class Assignment [&#91;qmd&#93;](/assignments/inclass-assignment/day8-assignment.qmd) [&#91;HTML&#93;](/assignments/inclass-assignment/html/day8-assignment.html)
 - Day 9 (Thu, Aug 6)
   - Demo: final project

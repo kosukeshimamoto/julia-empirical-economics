@@ -1,0 +1,293 @@
+---
+title: "Introduction to Duke Computer Cluster"
+format:
+  html:
+    toc: true
+    embed-resources: true
+---
+
+<style>
+main li > p {
+  margin-bottom: 0;
+}
+</style>
+
+## How to Use the DCC
+
+### What Is the Duke Computer Cluster?
+
+- The Duke Computer Cluster (DCC) provides access to much more memory and more
+  CPUs.
+- You can run jobs without using your computer.
+
+### Prerequisites
+
+- Please email `helpdesk@econ.duke.edu` to get access to the cluster beforehand.
+
+### SSH Setup
+
+- To avoid putting a password every time, set up SSH key at first.
+
+::: {.callout-note title="Set Up an SSH Key" appearance="simple"}
+- Generate a key pair in a terminal on your local machine:
+
+   ```bash
+   ssh-keygen -t ed25519
+   ```
+
+- Copy the public key:
+
+   ```bash
+   cat ~/.ssh/id_ed25519.pub
+   ```
+
+- Add the public key to your Duke profile.
+  - Follow the [Duke SSH public key instructions](https://vcm.duke.edu/help/23).
+- Test your connection.
+:::
+
+### Ways to Access the Cluster
+
+- **Terminal**
+
+  ```bash
+  ssh <netid>@dcc-login.oit.duke.edu
+  ```
+
+- **VS Code**
+  - Use the Remote-SSH extension.
+  - You can see and edit files directly.
+- **DCC OnDemand**
+  - See the [DCC OnDemand documentation](https://oit-rc.pages.oit.duke.edu/rcsupportdocs/OpenOnDemand/).
+
+### Cluster Storage and Directories
+
+- The following directories are available:
+- `/hpc/home/<netid>`: 25 GiB
+- `/hpc/group/econ`: 3.0 TiB (86%) used of 3.5 TiB
+  - Avoid using this directory.
+- `/hpc/dctrl/<netid>`: 500 GiB
+- `/work/<netid>`: 20 TiB
+
+#### Version Control with Git
+
+- You can set up a Git repository on the cluster. See the
+  [DCC Git documentation](https://oit-rc.pages.oit.duke.edu/rcsupportdocs/software/git/).
+- My recommendation is to develop your code locally and upload it to the
+  cluster through GitHub.
+
+#### File Transfer with rsync
+
+- Sync a local folder to the DCC:
+
+```bash
+rsync -avz --progress <local-folder>/ <netid>@dcc-login.oit.duke.edu:<remote-folder>/
+```
+
+- Sync a DCC folder to your local machine:
+
+```bash
+rsync -avz --progress <netid>@dcc-login.oit.duke.edu:<remote-folder>/ <local-folder>/
+```
+
+::: {.callout-tip title="Recommended Workflow" appearance="simple"}
+- Prerequisites:
+
+  - Develop code in a local Git repository.
+  - Store data and results in Dropbox.
+
+1. Develop your code locally and push your commits to GitHub.
+2. Pull the commits on the DCC.
+3. Sync the necessary data from Dropbox to the DCC with `rsync`.
+4. Run your job on the DCC.
+5. Sync the resulting data and outputs from the DCC to Dropbox with `rsync`.
+:::
+
+
+### Interactive Jobs
+
+- Do not run jobs on login nodes. 
+- Instead, start an interactive job:
+
+  ```bash
+  srun -p econ --account=econ --mem=16G --time=12:00:00 --pty bash -l
+  ```
+
+- You can then run a Julia file from the terminal as you would on your local
+  machine.
+- I do not use interactive jobs often, but they are useful if you want to run manually for checks.
+
+### Submit Jobs
+
+- You can submit a job with a shell script. The following minimal example uses
+  the `econ` partition:
+
+```bash
+#!/usr/bin/env bash
+#SBATCH --job-name=my-job
+#SBATCH --output=results/logs/slurm-%x-%j.out
+#SBATCH --error=results/logs/slurm-%x-%j.err
+#SBATCH --partition=econ
+#SBATCH --account=econ
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=16G
+#SBATCH --time=12:00:00
+
+module load Julia
+julia --project=. scripts/run_job.jl
+```
+
+- Submit the script with:
+
+```bash
+mkdir -p results/logs
+sbatch job.sh
+```
+
+### Useful commands
+
+- Monitor your jobs:
+
+```bash
+squeue -u <netid>
+squeue -u <netid> -i 30
+```
+
+- Cancel your jobs:
+
+```bash
+scancel -u <netid>
+```
+
+- Check node’s availability at econ partition:
+
+```bash
+sinfo -p econ -N -h -o "%N %T %C %e %m" \
+| awk '{
+  free = $4/1024; total = $5/1024;
+  printf "%-30s %-9s %-15s free=%7.1f GiB  total=%7.1f GiB\n", $1, $2, $3, free, total
+}'
+```
+
+- Show everyone's usage on the `econ` partition:
+
+```bash
+squeue -p econ -o "%.18i %.10u %.20j %.2t %.10M %4D %4C %.8m %.20R"
+```
+
+## Example: Grid Search
+
+- Suppose `generate_data` and `compute_objective_function` are already defined.
+- For each of 100 replications, the following Julia script evaluates 20 grid
+  points in each of four dimensions:
+
+```julia
+replication_id = parse(Int, ENV["SLURM_ARRAY_TASK_ID"])
+
+grid_values = range(-1.0, 1.0; length=20)
+parameter_grid = Iterators.product(ntuple(_ -> grid_values, 4)...)
+
+data = generate_data(replication_id)
+
+results = [
+    begin
+        parameters = collect(parameter_tuple)
+        objective = compute_objective_function(data, parameters)
+        (; replication_id, parameters, objective)
+    end
+    for parameter_tuple in parameter_grid
+]
+```
+
+- Use one Slurm array task for each replication, with at most four tasks running
+  at the same time.
+- Email notifications report when the array begins, ends, or fails.
+
+```bash
+#!/usr/bin/env bash
+#SBATCH --job-name=grid-search
+#SBATCH --output=results/logs/slurm-%x-%A_%a.out
+#SBATCH --error=results/logs/slurm-%x-%A_%a.err
+#SBATCH --partition=econ
+#SBATCH --account=econ
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=16G
+#SBATCH --time=12:00:00
+#SBATCH --array=1-100%4
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=<netid>@duke.edu
+
+module load Julia
+julia --project=. grid_search.jl
+```
+
+- Submit the array job with:
+
+```bash
+mkdir -p results/logs
+sbatch grid_search.sh
+```
+
+## Good Practices and Tips
+
+### Memory and CPU Allocation
+
+- Start with a small amount of memory and one CPU, such as 16 GB and one core.
+  - If this is not enough, increase the requested resources.
+  - Before submitting your main job, run a small job and check how much memory
+    your code requires.
+
+### Parallelization with Job Arrays or Julia?
+
+- Dividing tasks into appropriate chunks is critical for computational speed.
+  - I recommend choosing a chunk size that makes each task run for 5–30 minutes.
+- Parallelization in Julia requires multiple CPU threads and more memory.
+  - I would not recommend it unless you have a specific reason to use it.
+  - For example, your objective function may use parallelization internally.
+- I recommend job arrays as the default approach for parallelization.
+  - Each task can produce its own result.
+  - Requesting many CPUs and a large amount of memory can increase the wait
+    time for your job.
+    - Each compute node has a maximum number of CPUs and amount of RAM.
+    - When the cluster is crowded, your job must wait until a node can satisfy
+      the resource request.
+    
+### Dependency
+
+- You can submit multiple jobs with dependencies.
+- Dependencies are useful when a summary job should begin after a grid search
+  finishes successfully.
+
+::: {.callout-note collapse="true" title="Minimal Dependency Example"}
+
+```bash
+grid_job_id=$(sbatch --parsable grid_search.sh)
+sbatch --dependency=afterok:"$grid_job_id" summarize_grid_search.sh
+```
+
+:::
+
+### Other Tips
+
+- Add the following function to `~/.zshrc` on your local machine:
+
+  ```bash
+  dcc() {
+    ssh -t <netid>@dcc-login.oit.duke.edu \
+      'cd /hpc/dctrl/<netid> && exec "${SHELL:-/bin/bash}" -l'
+  }
+  ```
+
+- Reload your local zsh configuration and connect to the DCC:
+
+  ```bash
+  source ~/.zshrc
+  dcc
+  ```
+
+- If your computer preserves an SSH connection across sessions, you can let an
+  AI agent write commands on the cluster through that connection. Be careful.
