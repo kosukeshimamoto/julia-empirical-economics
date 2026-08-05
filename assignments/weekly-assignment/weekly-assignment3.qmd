@@ -570,14 +570,3 @@ execute:
 ```{julia}
 
 ```
-
-::: {.callout-important}
-## What changes when products interact?
-
-- The DGP checks all 64 market profiles and all eight portfolio deviations for
-  each firm.
-- The Fan--Yang estimator evaluates only two one-dimensional normal CDF values
-  for each product and market type.
-- Product decisions are coupled through cannibalization and cross-product
-  competition, but estimation does not require equilibrium computation.
-:::
