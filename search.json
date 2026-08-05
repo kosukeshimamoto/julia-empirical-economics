@@ -39,14 +39,14 @@
     "href": "index.html#assignments",
     "title": "Julia for Empirical Economics",
     "section": "Assignments",
-    "text": "Assignments\n\nHW1: Jul 26, 23:59\nHW2: Aug 5, 23:59\nHW3: Aug 12, 23:59"
+    "text": "Assignments\n\nHW1: Jul 26, 23:59\nHW2: Aug 9, 23:59\nHW3: Aug 16, 23:59"
   },
   {
     "objectID": "index.html#final-project",
     "href": "index.html#final-project",
     "title": "Julia for Empirical Economics",
     "section": "Final Project",
-    "text": "Final Project\n\nDescription"
+    "text": "Final Project\n\nDescription\nDeadline: Aug 23, 23:59"
   },
   {
     "objectID": "syllabus.html",
@@ -81,6 +81,6 @@
     "href": "syllabus.html#grading-and-assignments",
     "title": "Julia for Empirical Economics",
     "section": "Grading and Assignments",
-    "text": "Grading and Assignments\nYour course grade will depend on three components:\n\nIn-class assignments (30%): There will be one in-class assignment for each class. You need to submit it within 24 hours after the class ends. The grade is on a binary scale and is evaluated by effort. If you write at least one line of code, you will receive full credit. You receive full credit for this component if you correctly submit 7 of the 9 assignments, so you may miss 2 assignments.\nThree coding homework assignments (40%): You will be assigned weekly assignments during this class. The grades are evaluated by correctness. Each student must submit their own answer. All assignments are equally weighted.\nFinal project (30%): You will be asked to complete a Monte Carlo simulation as the final project. The final project should be based on 1) your own work, 2) a paper you like, or 3) papers I suggest. More details are documented in a separate file.\n\n\nDue\n\nHW1: Jul 26, 23:59\nHW2: Aug 2, 23:59\nHW3: Aug 9, 23:59\nFinal Project: Aug 23, 23:59\n\nRequirements\n\nAll code must be written in Julia. You may call other languages from Julia if necessary.\nYou must submit your code and its outputs.\nYou can submit outputs in any format, such as PDF, HTML, or Word, except for the final project. The final project should be submitted as a PDF typeset in LaTeX because this is the format commonly expected for our research.\nI recommend submitting homework as HTML files compiled from Quarto, because Quarto integrates well with Julia and is easy to write in.\nBefore I introduce Git and GitHub, you will submit assignments via Canvas. After we learn GitHub, you must submit them via GitHub."
+    "text": "Grading and Assignments\nYour course grade will depend on three components:\n\nIn-class assignments (30%): There will be one in-class assignment for each class. You need to submit it within 24 hours after the class ends. The grade is on a binary scale and is evaluated by effort. If you write at least one line of code, you will receive full credit. You receive full credit for this component if you correctly submit 7 of the 9 assignments, so you may miss 2 assignments.\nThree coding homework assignments (40%): You will be assigned weekly assignments during this class. The grades are evaluated by correctness. Each student must submit their own answer. All assignments are equally weighted.\nFinal project (30%): You will be asked to complete a Monte Carlo simulation as the final project. The final project should be based on 1) your own work, 2) a paper you like, or 3) papers I suggest. More details are documented in a separate file.\n\n\nDue\n\nHW1: Jul 26, 23:59\nHW2: Aug 9, 23:59\nHW3: Aug 16, 23:59\nFinal Project: Aug 23, 23:59\n\nRequirements\n\nAll code must be written in Julia. You may call other languages from Julia if necessary.\nYou must submit your code and its outputs.\nYou can submit outputs in any format, such as PDF, HTML, or Word, except for the final project. The final project should be submitted as a PDF typeset in LaTeX because this is the format commonly expected for our research.\nI recommend submitting homework as HTML files compiled from Quarto, because Quarto integrates well with Julia and is easy to write in.\nBefore I introduce Git and GitHub, you will submit assignments via Canvas. After we learn GitHub, you must submit them via GitHub."
   }
 ]
