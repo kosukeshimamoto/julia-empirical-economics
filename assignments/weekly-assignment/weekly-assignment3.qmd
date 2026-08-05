@@ -1,0 +1,583 @@
+---
+title: "Weekly Assignment 3: Discrete Games"
+engine: julia
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: true
+  eval: true
+  warning: false
+  message: false
+---
+
+::: {.callout-note}
+## General instructions
+
+- The details of each DGP, including its numerical parameters and distributions, are intentionally unspecified.
+  Choose them yourself, as you would in practice.
+- Choose nonzero true values for all parameters evaluated using the 5% relative-error criterion.
+- Grading criteria:
+  - If an objective-function plot is not minimized near the true parameters when identification is expected, half of the points for that part will be deducted.
+  - If an estimated parameter is not within 5% of its true value, half of the points for that part will be deducted.
+- The input and output examples below are illustrative only.
+- You may change them as needed to match your specification.
+- The 5% relative-error criterion applies only to point estimates; for set estimates, verify that the true parameter lies in the estimated set.
+:::
+
+## The Idea of the Assignment
+
+- This assignment asks you to conduct Monte Carlo experiments based on the
+  following papers:
+  - Martin Pesendorfer and Philipp Schmidt-Dengler (2008),
+    [“Asymptotic Least Squares Estimators for Dynamic Games”](https://doi.org/10.1111/j.1467-937X.2008.00496.x),
+    *The Review of Economic Studies*, 75(3), 901–928.
+  - Ying Fan and Chenyu Yang (2025),
+    [“Estimating Discrete Games with Many Firms and Many Decisions: An Application to Merger and Product Variety”](https://doi.org/10.1086/734724),
+    *Journal of Political Economy*, 133(6), 1886–1931.
+- You will determine the model details yourself; only the basic framework is
+  provided.
+- You may simplify the specifications if needed.
+
+
+## Question 1: Dynamic Discrete Game
+
+### Summary
+
+#### Setting
+
+- Firms $i=1,\ldots,N$ play an infinite-horizon dynamic discrete game. In
+  period $t$, firm $i$ observes the public state $x_t$ and private
+  action-specific shocks $\varepsilon_{it}(a_i)$, then chooses
+  $a_{it}\in\mathcal A_i$.
+- Firm $i$'s period payoff is
+
+  $$
+  u_i(a_i,a_{-i},x;\theta,\varepsilon_i)
+  =
+  \pi_i(a_i,a_{-i},x;\theta)
+  +
+  \varepsilon_i(a_i).
+  $$
+
+- The public state follows the controlled transition probability
+
+  $$
+  G(x'\mid x,a),
+  $$
+
+  where $a=(a_1,\ldots,a_N)$.
+- Let
+
+  $$
+  P_i(a_i\mid x)
+  =
+  \Pr(a_i\mid x)
+  $$
+
+  denote firm $i$'s conditional choice probability (CCP). Assume that the
+  private shocks are independent Type-I extreme value random variables.
+
+#### Equilibrium Condition
+
+- Begin with a proposed collection of CCPs $P$. Average over the rivals'
+  actions to obtain firm $i$'s expected current payoff from $a_i$:
+
+  $$
+  \bar\pi_i(a_i,x;P_{-i},\theta)
+  =
+  \sum_{a_{-i}}
+  \pi_i(a_i,a_{-i},x;\theta)
+  \prod_{j\ne i}P_j(a_j\mid x).
+  $$
+
+- The proposed CCPs also induce the public-state transition matrix
+
+  $$
+  F^P(x'\mid x)
+  =
+  \sum_a
+  G(x'\mid x,a)
+  \prod_jP_j(a_j\mid x).
+  $$
+
+- Up to an additive constant, the Type-I extreme value assumption gives the
+  expected flow payoff under policy $P$ as
+
+  $$
+  r_i^P(x;\theta)
+  =
+  \sum_{a_i}
+  P_i(a_i\mid x)
+  \bar\pi_i(a_i,x;P_{-i},\theta)
+  -
+  \sum_{a_i}
+  P_i(a_i\mid x)\log P_i(a_i\mid x).
+  $$
+
+- Evaluate policy $P$ by solving
+
+  $$
+  V_i^P
+  =
+  r_i^P+\beta F^PV_i^P,
+  $$
+
+  or equivalently,
+
+  $$
+  V_i^P
+  =
+  (I-\beta F^P)^{-1}r_i^P.
+  $$
+
+- To evaluate a one-period deviation to action $a_i$, hold firm $i$'s action
+  fixed and integrate over the rivals' CCPs:
+
+  $$
+  F_i^P(x'\mid x,a_i)
+  =
+  \sum_{a_{-i}}
+  G(x'\mid x,a_i,a_{-i})
+  \prod_{j\ne i}P_j(a_j\mid x).
+  $$
+
+- The resulting choice-specific value is
+
+  $$
+  v_i^P(a_i,x;\theta)
+  =
+  \bar\pi_i(a_i,x;P_{-i},\theta)
+  +
+  \beta
+  \sum_{x'}F_i^P(x'\mid x,a_i)V_i^P(x').
+  $$
+
+- The Type-I extreme value assumption gives the best-response CCP map
+
+  $$
+  \Psi_i(P;\theta)(a_i\mid x)
+  =
+  \frac{
+  \exp\{v_i^P(a_i,x;\theta)\}
+  }{
+  \sum_{\widetilde a_i}
+  \exp\{v_i^P(\widetilde a_i,x;\theta)\}
+  }.
+  $$
+
+- A Markov-perfect equilibrium is a fixed point of this map:
+
+  $$
+  P=\Psi(P;\theta).
+  $$
+
+#### Estimation
+
+- Estimate the CCPs from state-specific action frequencies in the simulated
+  data:
+
+  $$
+  \widehat P_i(a_i\mid x)
+  =
+  \frac{
+  \sum_{m,t}
+  \mathbf 1\{a_{imt}=a_i,\ x_{mt}=x\}
+  }{
+  \sum_{m,t}
+  \mathbf 1\{x_{mt}=x\}
+  }.
+  $$
+
+- For each candidate $\theta$, keep $\widehat P$ fixed and repeat the policy
+  evaluation above to compute $\Psi(\widehat P;\theta)$.
+- Following the CCP minimum-distance approach in
+  [Pesendorfer and Schmidt-Dengler (2008)](https://doi.org/10.1111/j.1467-937X.2008.00496.x),
+  define
+
+  $$
+  m(\theta)
+  =
+  \operatorname{vec}
+  \left[
+  \widehat P-\Psi(\widehat P;\theta)
+  \right]
+  $$
+
+  and estimate
+
+  $$
+  \widehat\theta
+  =
+  \operatorname*{arg\,min}_{\theta}
+  m(\theta)'Wm(\theta).
+  $$
+
+- The optimization does not update $\widehat P$ or solve a new equilibrium at
+  each candidate $\theta$.
+
+
+### (a) Define the DGP
+
+- Define the model environment, including the number of actions, the number of
+  states, and the transition probabilities.
+- Choose the true parameter values.
+
+- This solution uses two firms, two actions, and eight public states: four
+  lagged-action profiles crossed with two demand states.
+
+```{julia}
+
+```
+
+### (b) Solve the model
+
+- First, write a Julia function that maps a proposed set of CCPs and parameter
+  values into updated CCPs.
+- Then solve for an equilibrium by finding a fixed point of this mapping.
+
+```{julia}
+
+```
+
+### (c) Generate the data and report descriptive statistics
+
+```{julia}
+
+```
+
+### (d) Estimate the parameters
+
+- First, examine the shape of the objective function along several parameter
+  dimensions.
+- Then estimate the parameters.
+
+```{julia}
+
+```
+
+```{julia}
+
+```
+
+- The one-dimensional panels hold the other two parameters at their true
+  values. The two-dimensional panels below profile over the remaining
+  parameter.
+
+```{julia}
+
+```
+
+## Question 2: Fan and Yang (2025)
+
+### Summary
+
+#### Setting
+
+- Two firms $i\in\{1,2\}$ operate in market $m$ and simultaneously choose
+  product portfolios.
+- Each firm decides whether to offer each of $J$ products:
+
+  $$
+  a_{im}
+  =
+  (a_{i1m},\ldots,a_{iJm}),
+  \qquad
+  a_{ijm}\in\{0,1\}.
+  $$
+
+- Let $v_{jm}$ denote the known variable profit from product $j$, $C$ the
+  common fixed cost, and $s_j$ an observed product exposure.
+- Firm $i$'s payoff is
+
+  $$
+  \begin{aligned}
+  U_i(a_{im},a_{-i,m};C,\zeta_{im})
+  ={}&
+  \sum_j a_{ijm}(v_{jm}-C-\zeta_{ijm}) \\
+  &-\eta\sum_{j<k}s_js_k a_{ijm}a_{ikm} \\
+  &-\gamma\sum_j s_j^2a_{ijm}a_{-i,jm} \\
+  &-\lambda\sum_{j\ne k}s_js_k a_{ijm}a_{-i,km}.
+  \end{aligned}
+  $$
+
+- The second term captures cannibalization between a firm's own products.
+- The third term captures competition in the same product.
+- The fourth term captures competition across products.
+- Treat $(v_{jm},s_j,\eta,\gamma,\lambda)$ as known, estimate $C$, and
+  normalize
+
+  $$
+  \zeta_{ijm}\overset{iid}{\sim}N(0,1).
+  $$
+
+- This solution uses two firms and three products. Each firm has eight
+  possible portfolios, and the market has $8^2=64$ action profiles.
+
+#### The Idea
+
+- Begin with a two-firm game in which each firm chooses one binary action,
+  $a_i\in\{0,1\}$. The incremental payoff from action one is
+
+  $$
+  \Delta_i(a_{-i};\theta,\zeta_i)
+  =
+  d_i(a_{-i};\theta)-\zeta_i.
+  $$
+
+- Normalize the payoff shock as $\zeta_i\sim N(0,1)$.
+
+- Suppose the actions are strategic substitutes:
+
+  $$
+  d_i(1;\theta)
+  \leq
+  d_i(0;\theta).
+  $$
+
+- If $\zeta_i<d_i(1;\theta)$, action one is profitable even when the rival
+  chooses one. Action zero is then strictly dominated, so level-1 rationality
+  requires firm $i$ to choose one. This gives the lower bound
+
+  $$
+  \Phi\!\left(d_i(1;\theta)\right)
+  \leq
+  \Pr(a_i=1).
+  $$
+
+- If $\zeta_i>d_i(0;\theta)$, action one is unprofitable even when the rival
+  chooses zero. Action one is then strictly dominated and cannot be observed.
+  This gives the upper bound
+
+  $$
+  \Pr(a_i=1)
+  \leq
+  \Phi\!\left(d_i(0;\theta)\right).
+  $$
+
+- The two-firm example therefore yields
+
+  $$
+  \Phi\!\left(d_i(1;\theta)\right)
+  \leq
+  \Pr(a_i=1)
+  \leq
+  \Phi\!\left(d_i(0;\theta)\right).
+  $$
+
+- These bounds use only the worst- and best-case incremental profits. The
+  analyst does not need to solve the equilibrium or specify how an equilibrium
+  is selected.
+- In this assignment, each product decision $a_{ijm}$ plays the role of the
+  binary action in the two-firm example. The firm's other product decisions
+  and the rival's entire portfolio form the strategic environment.
+- Holding those other decisions fixed, the incremental payoff from adding
+  product $j$ is
+
+  $$
+  \begin{aligned}
+  \delta_{ijm}(a_{i,-j,m},a_{-i,m};C)
+  ={}&v_{jm}-C \\
+  &-\eta s_j\sum_{k\ne j}s_ka_{ikm} \\
+  &-\gamma s_j^2a_{-i,jm} \\
+  &-\lambda s_j\sum_{k\ne j}s_ka_{-i,km}.
+  \end{aligned}
+  $$
+
+- Because all interaction terms are strategic substitutes, setting all other
+  relevant actions to zero gives the best case:
+
+  $$
+  \overline\delta_{jm}(C)=v_{jm}-C.
+  $$
+
+- Setting all other relevant actions to one gives the worst case. Define the
+  resulting interaction penalty as
+
+  $$
+  D_j
+  =
+  (\eta+\lambda)s_j\sum_{k\ne j}s_k
+  +\gamma s_j^2.
+  $$
+
+- Then
+
+  $$
+  \underline\delta_{jm}(C)
+  =
+  v_{jm}-C-D_j.
+  $$
+
+- Applying the same two-action argument product by product gives
+
+  $$
+  \Phi\!\left(v_{jm}-C-D_j\right)
+  \leq
+  \Pr(a_{ijm}=1\mid v_{jm},s_j)
+  \leq
+  \Phi\!\left(v_{jm}-C\right).
+  $$
+
+- The illustration has one action per firm, but the DGP below is a portfolio
+  game. Product choices remain coupled even though the bounds are written for
+  one product at a time.
+
+#### Equilibrium Condition
+
+- To generate data, this solution solves the small portfolio game directly.
+- A pure-strategy Nash equilibrium is a pair of portfolios satisfying
+
+  $$
+  a_{im}
+  \in
+  \underset{a_i'\in\{0,1\}^J}{\arg\max}\;
+  U_i(a_i',a_{-i,m};C,\zeta_{im})
+  \qquad
+  \text{for each firm }i.
+  $$
+
+- Each firm therefore compares its chosen portfolio with all eight possible
+  portfolio deviations, not one product at a time.
+- More than one portfolio profile may satisfy these conditions.
+- The DGP selects uniformly from the pure-strategy equilibria only to produce
+  observed actions. The estimator below does not use this selection rule.
+
+#### Estimation
+
+- Let $p_{jr}$ be the population probability that a firm offers product $j$
+  in market type $r$.
+- For a candidate $C$, define
+
+  $$
+  \ell_{jr}(C)
+  =
+  \Phi(v_{jr}-C-D_j),
+  $$
+
+  $$
+  u_{jr}(C)
+  =
+  \Phi(v_{jr}-C).
+  $$
+
+- The population criterion is the largest violation of any probability
+  inequality:
+
+  $$
+  Q(C)
+  =
+  \max_{j,r}
+  \left\{
+  [\ell_{jr}(C)-p_{jr}]_+,
+  [p_{jr}-u_{jr}(C)]_+
+  \right\}.
+  $$
+
+- The population identified set is
+
+  $$
+  \mathcal C_I
+  =
+  \{C:Q(C)=0\}.
+  $$
+
+- In the sample, aggregate choices to market-product offering shares, estimate
+  $\widehat p_{jr}$ and its standard error $\widehat{se}_{jr}$, and calculate
+
+  $$
+  Q_M(C)
+  =
+  \max_{j,r}
+  \left\{
+  \left[
+  \frac{\ell_{jr}(C)-\widehat p_{jr}}
+       {\widehat{se}_{jr}}
+  \right]_+,
+  \left[
+  \frac{\widehat p_{jr}-u_{jr}(C)}
+       {\widehat{se}_{jr}}
+  \right]_+
+  \right\}.
+  $$
+
+- For an illustrative cutoff $c$, the sample acceptance set is
+
+  $$
+  \widehat{\mathcal C}_I
+  =
+  \{C:Q_M(C)\leq c\}.
+  $$
+
+### (a) Define the DGP
+
+- Define the model environment, including the utility function and the true
+  parameters.
+
+```{julia}
+
+```
+
+### (b) Solve the model for the DGP
+
+- Use uniform selection among pure-strategy equilibria when generating the
+  data.
+
+```{julia}
+
+```
+
+```{julia}
+
+```
+
+### (c) Check population identification
+
+- Compute the identification conditions numerically and evaluate the
+  probability inequalities over a one-dimensional grid for $C$.
+
+```{julia}
+
+```
+
+```{julia}
+
+```
+
+```{julia}
+
+```
+
+### (d) Generate the data and report descriptive statistics
+
+```{julia}
+
+```
+
+### (e) Estimate the sample acceptance set
+
+- Report the estimated set for $C$ using a chosen cutoff $c$.
+
+```{julia}
+
+```
+
+```{julia}
+
+```
+
+```{julia}
+
+```
+
+::: {.callout-important}
+## What changes when products interact?
+
+- The DGP checks all 64 market profiles and all eight portfolio deviations for
+  each firm.
+- The Fan--Yang estimator evaluates only two one-dimensional normal CDF values
+  for each product and market type.
+- Product decisions are coupled through cannibalization and cross-product
+  competition, but estimation does not require equilibrium computation.
+:::
