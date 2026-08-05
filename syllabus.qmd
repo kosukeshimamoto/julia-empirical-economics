@@ -59,8 +59,8 @@ More details are documented in a separate file.
 
 - Due
   - HW1: Jul 26, 23:59
-  - HW2: Aug 2, 23:59
-  - HW3: Aug 9, 23:59
+  - HW2: Aug 9, 23:59
+  - HW3: Aug 16, 23:59
   - Final Project: Aug 23, 23:59
 - Requirements
   - All code must be written in Julia. You may call other languages from Julia if necessary.
