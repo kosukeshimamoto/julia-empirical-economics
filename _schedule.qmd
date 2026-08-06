@@ -26,4 +26,4 @@
   - Duke Computer Cluster [&#91;HTML&#93;](/lectures/duke_computer_cluster.html)
   - In-class Assignment [&#91;qmd&#93;](/assignments/inclass-assignment/day8-assignment.qmd) [&#91;HTML&#93;](/assignments/inclass-assignment/html/day8-assignment.html)
 - Day 9 (Thu, Aug 6)
-  - Demo: final project
+  - Demo: final project [&#91;pdf&#93;](/finalprojects/Kosuke/slides/dcc_counterfactual_slides.pdf)

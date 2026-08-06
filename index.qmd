@@ -38,5 +38,4 @@ This module offers the opportunity to learn Julia programming and practical skil
 ## Final Project
 
 - [Description](/assignments/final-project-description.qmd)
-- [pdf](/finalprojects/Kosuke/slides/dcc_counterfactual_slides.pdf)
 - Deadline: Aug 23, 23:59
