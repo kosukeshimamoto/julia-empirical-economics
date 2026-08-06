@@ -28,6 +28,7 @@ project:
     - assignments/weekly-assignment/weekly-assignment1.qmd
     - assignments/weekly-assignment/weekly-assignment2.qmd
     - assignments/weekly-assignment/weekly-assignment3.qmd
+    - finalprojects/Kosuke/slides/dcc_counterfactual_slides.pdf
 
 website:
   title: "Empirical Economics with Julia"
