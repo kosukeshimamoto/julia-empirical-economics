@@ -1,0 +1,6 @@
+| $k_t$ | Profit state | Observations | Active choices | Active share |
+|---|---|---|---|---|
+| 0 | Low | 4232 | 3024 | 0.715 |
+| 0 | High | 2504 | 2393 | 0.956 |
+| 1 | Low | 15684 | 12562 | 0.801 |
+| 1 | High | 17580 | 17048 | 0.97 |

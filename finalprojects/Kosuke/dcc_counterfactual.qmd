@@ -1,0 +1,1993 @@
+---
+title: "Counterfactual Analysis for Structural Dynamic Discrete Choice Models"
+author: "Kosuke Shimamoto"
+jupyter: julia-1.12
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+    code-summary: "Show Julia code"
+---
+
+## Goal
+
+- Build and validate replication code for the paper's dynamic discrete-choice model and partial-identification procedure.
+- Visualize the trade-off between entry-cost and marginal-cost subsidies under partial identification.
+
+## Setting and Data-Generating Process
+
+### Model setup
+
+- A single firm chooses whether to be inactive ($a_t=0$) or active ($a_t=1$).
+- The state is $x_t=(k_t,w_t)$, where $k_t=a_{t-1}\in\{0,1\}$ and $w_t\in\{L,H\}$ is an observed profit state.
+- The profit state follows the known transition matrix $P$, independently of the current action, and $k_{t+1}=a_t$.
+- The running cost $r_w$ is the fixed operating cost paid whenever the firm is active.
+- Deterministic flow payoffs are:
+
+| Previous action | Inactive, $a_t=0$ | Active, $a_t=1$ |
+|---|---:|---:|
+| $k_t=0$ | $0$ | $\pi_w-r_w-e_w$ |
+| $k_t=1$ | $s_w$ | $\pi_w-r_w$ |
+
+- The profit vector $\pi$, transition matrix $P$, discount factor $\beta$, and Type-I extreme-value shock distribution are known.
+- The state-specific scrap values $s=(s_L,s_H)$, entry costs $e=(e_L,e_H)$, and running costs $r=(r_L,r_H)$ are unknown.
+- Entry and running costs are nonnegative; no sign restriction is imposed on scrap values.
+- The calibration follows the numerical structure of the paper while retaining two free scrap values.
+
+```{julia}
+#| label: model-calibration
+
+using DataFrames
+using LinearAlgebra
+using Optim
+using Plots
+using Random
+using Roots
+using Statistics
+
+const PROFIT = [2.0, 4.0]
+const PROFIT_TRANSITION = [0.75 0.25; 0.25 0.75]
+const DISCOUNT = 0.90
+const TRUE_PARAMETERS = (
+    scrap = [4.5, 4.5],
+    entry = [5.0, 5.0],
+    running = [0.5, 0.5],
+)
+const BELLMAN_TOLERANCE = 1e-11
+const DATA_SEED = 104729
+const N_FIRMS = 2_000
+const N_PERIODS = 20
+
+DataFrame(
+    profit_state = ["Low", "High"],
+    profit = PROFIT,
+    scrap = TRUE_PARAMETERS.scrap,
+    entry = TRUE_PARAMETERS.entry,
+    running = TRUE_PARAMETERS.running,
+)
+```
+
+### Model solution
+
+- Let $V(k,w)$ denote the ex-ante value and let $F_a$ be the state-transition matrix conditional on action $a$.
+- The choice-specific values and the ex-ante value satisfy:
+
+$$
+v_a(k,w)=u(k,w,a)+\beta E[V(a,w')\mid w],
+$$
+
+$$
+V(k,w)=\log\!\left(\exp(v_0(k,w))+\exp(v_1(k,w))\right).
+$$
+
+- The active-choice probability is:
+
+$$
+p_{kw}=\frac{\exp(v_1(k,w))}{\exp(v_0(k,w))+\exp(v_1(k,w))}.
+$$
+
+- Value iteration solves the four-state model and returns its four population CCPs.
+
+```{julia}
+#| label: model-solver
+
+state_index(; previous_action, profit_state) = 2 * previous_action + profit_state
+
+function action_transition(; action, transition = PROFIT_TRANSITION)
+    matrix = zeros(4, 4)
+    for previous_action in 0:1, profit_state in 1:2, next_profit_state in 1:2
+        row = state_index(
+            previous_action = previous_action,
+            profit_state = profit_state,
+        )
+        column = state_index(
+            previous_action = action,
+            profit_state = next_profit_state,
+        )
+        matrix[row, column] = transition[profit_state, next_profit_state]
+    end
+    return matrix
+end
+
+function flow_payoffs(; parameters, profit = PROFIT)
+    inactive = [0.0, 0.0, parameters.scrap[1], parameters.scrap[2]]
+    active = [
+        profit[1] - parameters.running[1] - parameters.entry[1],
+        profit[2] - parameters.running[2] - parameters.entry[2],
+        profit[1] - parameters.running[1],
+        profit[2] - parameters.running[2],
+    ]
+    return (inactive = inactive, active = active)
+end
+
+function logsumexp2(left, right)
+    largest = max(left, right)
+    return largest + log(exp(left - largest) + exp(right - largest))
+end
+
+function bellman_operator(;
+    values,
+    parameters,
+    profit = PROFIT,
+    transition = PROFIT_TRANSITION,
+    discount = DISCOUNT,
+)
+    payoff = flow_payoffs(parameters = parameters, profit = profit)
+    inactive_value = payoff.inactive .+
+                     discount .* (action_transition(action = 0, transition = transition) * values)
+    active_value = payoff.active .+
+                   discount .* (action_transition(action = 1, transition = transition) * values)
+    return (
+        values = logsumexp2.(inactive_value, active_value),
+        inactive_value = inactive_value,
+        active_value = active_value,
+    )
+end
+
+function solve_model(;
+    parameters,
+    profit = PROFIT,
+    transition = PROFIT_TRANSITION,
+    discount = DISCOUNT,
+    tolerance = BELLMAN_TOLERANCE,
+    maximum_iterations = 20_000,
+)
+    values = zeros(4)
+    for iteration in 1:maximum_iterations
+        update = bellman_operator(
+            values = values,
+            parameters = parameters,
+            profit = profit,
+            transition = transition,
+            discount = discount,
+        )
+        difference = maximum(abs.(update.values .- values))
+        values = update.values
+        if difference <= tolerance
+            final_update = bellman_operator(
+                values = values,
+                parameters = parameters,
+                profit = profit,
+                transition = transition,
+                discount = discount,
+            )
+            return (
+                values = values,
+                inactive_value = final_update.inactive_value,
+                active_value = final_update.active_value,
+                residual = maximum(abs.(final_update.values .- values)),
+                iterations = iteration,
+                converged = true,
+            )
+        end
+    end
+    error("Value iteration did not converge.")
+end
+
+function model_ccps(;
+    parameters,
+    profit = PROFIT,
+    transition = PROFIT_TRANSITION,
+    discount = DISCOUNT,
+)
+    solution = solve_model(
+        parameters = parameters,
+        profit = profit,
+        transition = transition,
+        discount = discount,
+    )
+    probability = 1.0 ./
+        (1.0 .+ exp.(solution.inactive_value .- solution.active_value))
+    return (ccp = probability, solution = solution)
+end
+
+baseline_model = model_ccps(parameters = TRUE_PARAMETERS)
+
+DataFrame(
+    previous_action = [0, 0, 1, 1],
+    profit_state = ["Low", "High", "Low", "High"],
+    value = baseline_model.solution.values,
+    active_ccp = baseline_model.ccp,
+)
+```
+
+## Identification
+
+- Let $p_{kw}=\Pr(a=1\mid k,w)$ and define $d_{kw}=\log[p_{kw}/(1-p_{kw})]$.
+- For each profit state, the continuation term is common across $k$, but the current payoff difference varies:
+
+$$
+C_w=\beta\sum_{w'}P_{ww'}[V(1,w')-V(0,w')],
+$$
+
+$$
+d_{0w}=\pi_w-r_w-e_w+C_w,
+\qquad
+d_{1w}=\pi_w-r_w-s_w+C_w.
+$$
+
+- Taking differences gives the first identifying equation:
+
+$$
+d_{1w}-d_{0w}=e_w-s_w.
+$$
+
+- For the second equation, compare the inactive paths $(0,w)\rightarrow(0,w')$ and $(1,w)\rightarrow(0,w')$.
+- Their continuation values are identical, so the logit inclusive-value identity gives:
+
+$$
+V(1,w)-V(0,w)
+=s_w+\log\!\left(\frac{1-p_{0w}}{1-p_{1w}}\right)
+=s_w+A_w(p),
+$$
+
+where $A_w(p)=\log[(1-p_{0w})/(1-p_{1w})]$.
+- The two equations recover entry and running costs for each candidate $s=(s_L,s_H)$:
+
+$$
+e_w(s;p)=s_w+d_{1w}-d_{0w},
+$$
+
+$$
+r_w(s;p)=\pi_w-e_w(s;p)
++\beta\sum_{w'}P_{ww'}[s_{w'}+A_{w'}(p)]-d_{0w}.
+$$
+
+- Nonnegative entry and running costs define the admissible polygon in the two free scrap values:
+
+$$
+\mathcal S(p)=\{s\in\mathbb R^2:e_w(s;p)\geq0,\ r_w(s;p)\geq0,
+\ w\in\{L,H\}\}.
+$$
+
+- The payoff identified set is:
+
+$$
+\Theta_I(p)=\{(s,e(s;p),r(s;p)):s\in\mathcal S(p)\}.
+$$
+
+- The following code constructs this population set from exact CCPs before any data are simulated.
+
+```{julia}
+#| label: population-identification
+
+function log_odds(probability)
+    0.0 < probability < 1.0 || error("Each CCP must be strictly interior.")
+    return log(probability / (1.0 - probability))
+end
+
+function ccp_matrix(; ccps)
+    return [ccps[1] ccps[2]; ccps[3] ccps[4]]
+end
+
+function inclusive_value_difference(; ccps)
+    probability = ccp_matrix(ccps = ccps)
+    return log.((1.0 .- probability[1, :]) ./ (1.0 .- probability[2, :]))
+end
+
+function entry_costs(; scrap, ccps)
+    probability = ccp_matrix(ccps = ccps)
+    logit = log_odds.(probability)
+    return scrap .+ logit[2, :] .- logit[1, :]
+end
+
+function running_costs(;
+    scrap,
+    ccps,
+    transition = PROFIT_TRANSITION,
+    profit = PROFIT,
+    discount = DISCOUNT,
+)
+    probability = ccp_matrix(ccps = ccps)
+    logit = log_odds.(probability)
+    entry = entry_costs(scrap = scrap, ccps = ccps)
+    inclusive_difference = inclusive_value_difference(ccps = ccps)
+    return profit .- entry .+
+           discount .* (transition * (scrap .+ inclusive_difference)) .-
+           vec(logit[1, :])
+end
+
+function parameters_from_scrap(;
+    scrap,
+    ccps,
+    transition = PROFIT_TRANSITION,
+    profit = PROFIT,
+    discount = DISCOUNT,
+)
+    return (
+        scrap = collect(scrap),
+        entry = entry_costs(scrap = scrap, ccps = ccps),
+        running = running_costs(
+            scrap = scrap,
+            ccps = ccps,
+            transition = transition,
+            profit = profit,
+            discount = discount,
+        ),
+    )
+end
+
+function moment_residuals(;
+    parameters,
+    ccps,
+    transition = PROFIT_TRANSITION,
+    profit = PROFIT,
+    discount = DISCOUNT,
+)
+    probability = ccp_matrix(ccps = ccps)
+    logit = log_odds.(probability)
+    inclusive_difference = inclusive_value_difference(ccps = ccps)
+    first_moment = vec(logit[2, :] .- logit[1, :]) .-
+                   (parameters.entry .- parameters.scrap)
+    second_moment = vec(logit[1, :]) .-
+        (profit .- parameters.running .- parameters.entry .+
+         discount .* (transition * (parameters.scrap .+ inclusive_difference)))
+    return vcat(first_moment, second_moment)
+end
+
+function payoff_constraints(;
+    ccps,
+    transition = PROFIT_TRANSITION,
+    profit = PROFIT,
+    discount = DISCOUNT,
+)
+    probability = ccp_matrix(ccps = ccps)
+    logit = log_odds.(probability)
+    difference = vec(logit[2, :] .- logit[1, :])
+    inclusive_difference = inclusive_value_difference(ccps = ccps)
+    running_slope = discount .* transition .- Matrix{Float64}(I, 2, 2)
+    running_intercept = profit .- difference .+
+        discount .* (transition * inclusive_difference) .- vec(logit[1, :])
+    constraint_matrix = [
+        -1.0 0.0
+        0.0 -1.0
+        -running_slope[1, 1] -running_slope[1, 2]
+        -running_slope[2, 1] -running_slope[2, 2]
+    ]
+    constraint_bound = [difference[1], difference[2],
+                        running_intercept[1], running_intercept[2]]
+    return (matrix = constraint_matrix, bound = constraint_bound)
+end
+
+function polygon_vertices(; constraints, tolerance = 1e-9)
+    candidates = Vector{Vector{Float64}}()
+    rows = axes(constraints.matrix, 1)
+    for first_row in rows, second_row in (first_row + 1):last(rows)
+        pair = constraints.matrix[[first_row, second_row], :]
+        abs(det(pair)) <= tolerance && continue
+        candidate = pair \ constraints.bound[[first_row, second_row]]
+        if all(constraints.matrix * candidate .<= constraints.bound .+ tolerance)
+            push!(candidates, candidate)
+        end
+    end
+    isempty(candidates) && error("The identified polygon is empty or unbounded.")
+    unique_candidates = unique(candidate -> round.(candidate; digits = 9), candidates)
+    center = sum(unique_candidates) ./ length(unique_candidates)
+    order = sortperm(
+        unique_candidates;
+        by = candidate -> atan(candidate[2] - center[2], candidate[1] - center[1]),
+    )
+    return reduce(vcat, permutedims.(unique_candidates[order]))
+end
+
+function payoff_identified_polygon(;
+    ccps,
+    transition = PROFIT_TRANSITION,
+    profit = PROFIT,
+    discount = DISCOUNT,
+)
+    constraints = payoff_constraints(
+        ccps = ccps,
+        transition = transition,
+        profit = profit,
+        discount = discount,
+    )
+    vertices = polygon_vertices(constraints = constraints)
+    return (constraints = constraints, vertices = vertices)
+end
+
+population_ccps = baseline_model.ccp
+population_polygon = payoff_identified_polygon(ccps = population_ccps)
+
+DataFrame(
+    scrap_low = population_polygon.vertices[:, 1],
+    scrap_high = population_polygon.vertices[:, 2],
+)
+```
+
+```{julia}
+#| label: population-identification-checks
+
+true_recovered = parameters_from_scrap(
+    scrap = TRUE_PARAMETERS.scrap,
+    ccps = population_ccps,
+)
+true_is_feasible = all(
+    population_polygon.constraints.matrix * TRUE_PARAMETERS.scrap .<=
+    population_polygon.constraints.bound .+ 1e-9
+)
+population_moment_error = maximum(abs.(moment_residuals(
+    parameters = TRUE_PARAMETERS,
+    ccps = population_ccps,
+)))
+
+population_checks = DataFrame(
+    check = [
+        "Bellman residual",
+        "True point is in population polygon",
+        "Largest recovered-cost discrepancy",
+        "Largest population moment residual",
+    ],
+    value = [
+        baseline_model.solution.residual,
+        Float64(true_is_feasible),
+        maximum(vcat(
+            abs.(true_recovered.entry .- TRUE_PARAMETERS.entry),
+            abs.(true_recovered.running .- TRUE_PARAMETERS.running),
+        )),
+        population_moment_error,
+    ],
+)
+
+@assert baseline_model.solution.converged
+@assert all(0.0 .< population_ccps .< 1.0)
+@assert true_is_feasible
+@assert maximum(population_checks.value[[1, 3, 4]]) < 1e-8
+
+population_checks
+```
+
+```{julia}
+#| label: fig-population-identified-set
+#| fig-cap: "Population identified polygon in the two free scrap values; the true value lies inside the set."
+#| fig-width: 6.5
+#| fig-height: 5
+
+population_shape = Shape(
+    population_polygon.vertices[:, 1],
+    population_polygon.vertices[:, 2],
+)
+population_set_plot = plot(
+    population_shape;
+    fillcolor = :white,
+    fillalpha = 0.0,
+    linecolor = :black,
+    linewidth = 2.5,
+    label = "Population identified set",
+    xlabel = "Scrap value in low state, s_L",
+    ylabel = "Scrap value in high state, s_H",
+)
+scatter!(
+    population_set_plot,
+    [TRUE_PARAMETERS.scrap[1]],
+    [TRUE_PARAMETERS.scrap[2]];
+    color = :black,
+    marker = :star5,
+    markersize = 8,
+    label = "True scrap values",
+)
+population_set_plot
+```
+
+## Estimation
+
+### Data-generating process
+
+- The DGP draws actions from the four population CCPs, sets $k_{t+1}=a_t$, and draws $w_{t+1}$ from $P(\cdot\mid w_t)$.
+
+```{julia}
+#| label: simulate-panel
+
+function draw_next_profit_state(; rng, current_profit_state, transition)
+    return rand(rng) <= transition[current_profit_state, 1] ? 1 : 2
+end
+
+function simulate_panel(;
+    rng,
+    parameters,
+    firms,
+    periods,
+    transition = PROFIT_TRANSITION,
+)
+    probability = model_ccps(
+        parameters = parameters,
+        transition = transition,
+    ).ccp
+    rows = NamedTuple[]
+    for firm in 1:firms
+        previous_action = 0
+        profit_state = rand(rng, 1:2)
+        for period in 1:periods
+            current_state = state_index(
+                previous_action = previous_action,
+                profit_state = profit_state,
+            )
+            action = rand(rng) < probability[current_state] ? 1 : 0
+            next_profit_state = draw_next_profit_state(
+                rng = rng,
+                current_profit_state = profit_state,
+                transition = transition,
+            )
+            next_state = state_index(
+                previous_action = action,
+                profit_state = next_profit_state,
+            )
+            push!(rows, (
+                firm = firm,
+                period = period,
+                previous_action = previous_action,
+                profit_state = profit_state,
+                state = current_state,
+                action = action,
+                next_previous_action = action,
+                next_profit_state = next_profit_state,
+                next_state = next_state,
+            ))
+            previous_action = action
+            profit_state = next_profit_state
+        end
+    end
+    return DataFrame(rows)
+end
+
+simulated_data = simulate_panel(
+    rng = MersenneTwister(DATA_SEED),
+    parameters = TRUE_PARAMETERS,
+    firms = N_FIRMS,
+    periods = N_PERIODS,
+)
+
+first(simulated_data, 8)
+```
+
+### Summary Statistics
+
+- The state-level table reports the observations and active choices used to estimate each CCP.
+
+```{julia}
+#| label: summary-statistics
+
+summary_statistics = combine(
+    groupby(simulated_data, [:previous_action, :profit_state]),
+    nrow => :observations,
+    :action => sum => :active_choices,
+    :action => mean => :active_share,
+)
+sort!(summary_statistics, [:previous_action, :profit_state])
+summary_statistics
+```
+
+### Estimated CCPs
+
+- Estimate each $p_{kw}$ by the active-choice frequency in state $(k,w)$.
+- Estimate each row of $P$ by the corresponding empirical transition frequency for $w_t\rightarrow w_{t+1}$.
+
+$$
+\widehat p_{kw}
+=\frac{\sum_{i,t}\mathbf 1\{k_{it}=k,w_{it}=w,a_{it}=1\}}
+{\sum_{i,t}\mathbf 1\{k_{it}=k,w_{it}=w\}}.
+$$
+
+```{julia}
+#| label: estimate-ccps
+
+function estimate_ccps(; data)
+    table = combine(
+        groupby(data, [:previous_action, :profit_state]),
+        nrow => :observations,
+        :action => sum => :active_choices,
+        :action => mean => :estimated_ccp,
+    )
+    sort!(table, [:previous_action, :profit_state])
+    nrow(table) == 4 || error("All four states must be observed.")
+    all(0.0 .< table.estimated_ccp .< 1.0) ||
+        error("All four estimated CCPs must be strictly interior.")
+    return (ccp = table.estimated_ccp, table = table)
+end
+
+function estimate_profit_transition(; data)
+    transition = zeros(2, 2)
+    for current_state in 1:2
+        rows = data.profit_state .== current_state
+        sum(rows) > 0 || error("Both profit states must be observed.")
+        for next_state in 1:2
+            transition[current_state, next_state] =
+                mean(data.next_profit_state[rows] .== next_state)
+        end
+    end
+    return transition
+end
+
+ccp_estimate = estimate_ccps(data = simulated_data)
+estimated_ccps = ccp_estimate.ccp
+estimated_transition = estimate_profit_transition(data = simulated_data)
+
+ccp_comparison = copy(ccp_estimate.table)
+ccp_comparison.population_ccp = population_ccps
+ccp_comparison
+```
+
+### Sample objective
+
+- Replace $p$ and $P$ in the four population restrictions with $\widehat p$ and $\widehat P$.
+- Stack the two difference restrictions and two level restrictions in $\widehat m(\theta)$.
+- With $W=I_4$, the sample minimum-distance objective is:
+
+$$
+\widehat Q(\theta)=\widehat m(\theta)'\widehat m(\theta),
+\qquad
+\theta=(s_L,s_H,e_L,e_H,r_L,r_H).
+$$
+
+```{julia}
+#| label: sample-objective
+
+function minimum_distance_objective(;
+    parameters,
+    ccps,
+    transition,
+)
+    residual = moment_residuals(
+        parameters = parameters,
+        ccps = ccps,
+        transition = transition,
+    )
+    return sum(abs2, residual)
+end
+
+minimum_distance_objective(
+    parameters = TRUE_PARAMETERS,
+    ccps = estimated_ccps,
+    transition = estimated_transition,
+)
+```
+
+### Estimated identified set
+
+- For every candidate $(s_L,s_H)$, plug $\widehat p$ and $\widehat P$ into the analytic formulas for $e(s)$ and $r(s)$.
+- The nonnegativity restrictions $e_w(s)\geq0$ and $r_w(s)\geq0$ define the estimated polygon $\widehat{\mathcal S}$.
+- The polygon is the primary estimate; a plain grid search checks its two-dimensional projection without a heatmap or color scale.
+
+```{julia}
+#| label: estimated-identified-set
+
+estimated_polygon = payoff_identified_polygon(
+    ccps = estimated_ccps,
+    transition = estimated_transition,
+)
+
+DataFrame(
+    scrap_low = estimated_polygon.vertices[:, 1],
+    scrap_high = estimated_polygon.vertices[:, 2],
+)
+```
+
+```{julia}
+#| label: estimation-grid-search
+
+const GRID_OBJECTIVE_CUTOFF = 1e-12
+
+function grid_search_projection(;
+    low_grid,
+    high_grid,
+    ccps,
+    transition,
+    constraints,
+    objective_cutoff,
+)
+    rows = NamedTuple[]
+    for scrap_low in low_grid, scrap_high in high_grid
+        scrap = [scrap_low, scrap_high]
+        parameters = parameters_from_scrap(
+            scrap = scrap,
+            ccps = ccps,
+            transition = transition,
+        )
+        objective = minimum_distance_objective(
+            parameters = parameters,
+            ccps = ccps,
+            transition = transition,
+        )
+        feasible = all(constraints.matrix * scrap .<= constraints.bound .+ 1e-9)
+        if feasible && objective <= objective_cutoff
+            push!(rows, (
+                scrap_low = scrap_low,
+                scrap_high = scrap_high,
+                objective = objective,
+            ))
+        end
+    end
+    return DataFrame(rows)
+end
+
+all_vertices = vcat(population_polygon.vertices, estimated_polygon.vertices)
+low_margin = 0.08 * (maximum(all_vertices[:, 1]) - minimum(all_vertices[:, 1]))
+high_margin = 0.08 * (maximum(all_vertices[:, 2]) - minimum(all_vertices[:, 2]))
+low_grid = range(
+    minimum(all_vertices[:, 1]) - low_margin,
+    maximum(all_vertices[:, 1]) + low_margin;
+    length = 161,
+)
+high_grid = range(
+    minimum(all_vertices[:, 2]) - high_margin,
+    maximum(all_vertices[:, 2]) + high_margin;
+    length = 161,
+)
+
+grid_projection = grid_search_projection(
+    low_grid = low_grid,
+    high_grid = high_grid,
+    ccps = estimated_ccps,
+    transition = estimated_transition,
+    constraints = estimated_polygon.constraints,
+    objective_cutoff = GRID_OBJECTIVE_CUTOFF,
+)
+
+DataFrame(
+    retained_grid_points = [nrow(grid_projection)],
+    objective_cutoff = [GRID_OBJECTIVE_CUTOFF],
+)
+```
+
+```{julia}
+#| label: fig-estimated-identified-set
+#| fig-cap: "Population and estimated payoff sets in separate panels. Gray grid points numerically verify the estimated polygon."
+#| fig-width: 10
+#| fig-height: 4.5
+
+population_panel = plot(
+    Shape(population_polygon.vertices[:, 1], population_polygon.vertices[:, 2]);
+    fillalpha = 0.0,
+    linecolor = :black,
+    linewidth = 2.5,
+    label = "Population set",
+    xlabel = "s_L",
+    ylabel = "s_H",
+    title = "Population",
+)
+scatter!(
+    population_panel,
+    [TRUE_PARAMETERS.scrap[1]],
+    [TRUE_PARAMETERS.scrap[2]];
+    color = :black,
+    marker = :star5,
+    markersize = 7,
+    label = "True value",
+)
+
+estimated_panel = scatter(
+    grid_projection.scrap_low,
+    grid_projection.scrap_high;
+    color = :lightgray,
+    markerstrokewidth = 0,
+    markersize = 2,
+    label = "Feasible grid points",
+    xlabel = "s_L",
+    ylabel = "s_H",
+    title = "Estimated",
+)
+plot!(
+    estimated_panel,
+    Shape(estimated_polygon.vertices[:, 1], estimated_polygon.vertices[:, 2]);
+    fillalpha = 0.0,
+    linecolor = :black,
+    linewidth = 2.5,
+    label = "Analytic boundary",
+)
+
+plot(population_panel, estimated_panel; layout = (1, 2))
+```
+
+### Validation
+
+- Confirm that the true payoff vector lies in the population polygon and satisfies the population restrictions.
+- Confirm that every estimated polygon vertex satisfies the sample restrictions and reproduces the estimated CCPs.
+- Compare the four estimated CCPs and the estimated transition matrix with their population counterparts.
+
+```{julia}
+#| label: estimation-validation
+
+vertex_ccp_errors = Float64[]
+vertex_moment_errors = Float64[]
+for row in eachrow(DataFrame(
+    scrap_low = estimated_polygon.vertices[:, 1],
+    scrap_high = estimated_polygon.vertices[:, 2],
+))
+    parameters = parameters_from_scrap(
+        scrap = [row.scrap_low, row.scrap_high],
+        ccps = estimated_ccps,
+        transition = estimated_transition,
+    )
+    reproduced = model_ccps(
+        parameters = parameters,
+        transition = estimated_transition,
+    ).ccp
+    push!(vertex_ccp_errors, maximum(abs.(reproduced .- estimated_ccps)))
+    push!(vertex_moment_errors, maximum(abs.(moment_residuals(
+        parameters = parameters,
+        ccps = estimated_ccps,
+        transition = estimated_transition,
+    ))))
+end
+
+validation_table = DataFrame(
+    check = [
+        "Largest CCP sampling error",
+        "Largest transition-probability sampling error",
+        "Largest estimated-vertex moment residual",
+        "Largest estimated-vertex CCP reproduction error",
+        "Largest retained-grid objective",
+    ],
+    value = [
+        maximum(abs.(estimated_ccps .- population_ccps)),
+        maximum(abs.(estimated_transition .- PROFIT_TRANSITION)),
+        maximum(vertex_moment_errors),
+        maximum(vertex_ccp_errors),
+        maximum(grid_projection.objective),
+    ],
+)
+
+@assert maximum(vertex_moment_errors) < 1e-8
+@assert maximum(vertex_ccp_errors) < 1e-8
+@assert maximum(grid_projection.objective) <= GRID_OBJECTIVE_CUTOFF
+
+validation_table
+```
+
+## Counterfactual Analysis
+
+### Overview
+
+- Compare an entry-cost subsidy, a marginal-cost subsidy, and their joint use by re-solving the model over the estimated payoff set.
+- Report identified outcome bounds because each admissible payoff vector can imply a different policy response.
+
+#### Policy design
+
+- Evaluate proportional entry-cost and operating-cost subsidies on a $21\times21$ grid with $\tau_E,\tau_M\in[0,0.5]$.
+- Under the one-unit-output normalization, $r_w$ is the per-period cost affected by the marginal-cost subsidy:
+
+$$
+e_w^{cf}=(1-\tau_E)e_w,
+\qquad
+r_w^{cf}=(1-\tau_M)r_w.
+$$
+
+- The policies leave scrap values and the profit-state transition matrix unchanged.
+
+```{julia}
+#| label: counterfactual-mechanisms
+
+policy_mechanism_table = DataFrame(
+    policy = ["Entry-cost subsidy", "Marginal-cost subsidy"],
+    payoff_change = ["Reduces e_w on entry", "Reduces r_w whenever active"],
+    payment_basis = ["Inactive firm chooses entry", "Firm chooses active operation"],
+)
+
+policy_mechanism_table
+```
+
+#### Counterfactual outcomes
+
+- Let $\mu_{kw}^{cf}$ be the stationary probability of state $(k,w)$ and $p_{kw}^{cf}$ its active CCP.
+- The stationary active share and its percentage change are:
+
+$$
+\mu_1^{cf}=\sum_{k,w}\mu_{kw}^{cf}p_{kw}^{cf},
+\qquad
+R_\mu=100\frac{\mu_1^{cf}-\mu_1^0}{\mu_1^0}.
+$$
+
+- Long-run expenditure per firm and period is:
+
+$$
+G_E=\sum_w \tau_E e_w\mu_{0w}^{cf}p_{0w}^{cf},
+$$
+
+$$
+G_M=\sum_{k,w}\tau_M r_w\mu_{kw}^{cf}p_{kw}^{cf},
+\qquad
+G=G_E+G_M.
+$$
+
+- Cost-effectiveness is $CE=R_\mu/G$ when $G>0$.
+
+```{julia}
+#| label: counterfactual-functions
+
+const POLICY_GRID = collect(range(0.0, 0.5; length = 21))
+const IDENTIFIED_GRID_RESOLUTION = 21
+const MINIMUM_EXPENDITURE = 1e-4
+
+function controlled_transition(;
+    ccps,
+    transition = estimated_transition,
+)
+    inactive_transition = action_transition(action = 0, transition = transition)
+    active_transition = action_transition(action = 1, transition = transition)
+    matrix = zeros(4, 4)
+    for state in 1:4
+        matrix[state, :] =
+            (1.0 - ccps[state]) .* inactive_transition[state, :] .+
+            ccps[state] .* active_transition[state, :]
+    end
+    return matrix
+end
+
+function stationary_distribution(;
+    ccps,
+    transition = estimated_transition,
+)
+    policy_transition = controlled_transition(
+        ccps = ccps,
+        transition = transition,
+    )
+    system = transpose(policy_transition) - Matrix{Float64}(I, 4, 4)
+    system[end, :] .= 1.0
+    target = zeros(4)
+    target[end] = 1.0
+    distribution = system \ target
+    stationarity_error = maximum(abs.(
+        transpose(policy_transition) * distribution .- distribution
+    ))
+    return (
+        distribution = distribution,
+        policy_transition = policy_transition,
+        stationarity_error = stationarity_error,
+    )
+end
+
+function counterfactual_outcome(;
+    parameters,
+    entry_subsidy_rate,
+    marginal_subsidy_rate,
+    transition = estimated_transition,
+)
+    counterfactual_parameters = (
+        scrap = parameters.scrap,
+        entry = (1.0 - entry_subsidy_rate) .* parameters.entry,
+        running = (1.0 - marginal_subsidy_rate) .* parameters.running,
+    )
+    model = model_ccps(
+        parameters = counterfactual_parameters,
+        transition = transition,
+    )
+    stationary = stationary_distribution(
+        ccps = model.ccp,
+        transition = transition,
+    )
+    distribution = stationary.distribution
+    active_share = dot(distribution, model.ccp)
+
+    entry_expenditure = 0.0
+    marginal_expenditure = 0.0
+    entry_flow = 0.0
+    exit_flow = 0.0
+    for profit_state in 1:2
+        inactive_state = state_index(
+            previous_action = 0,
+            profit_state = profit_state,
+        )
+        active_state = state_index(
+            previous_action = 1,
+            profit_state = profit_state,
+        )
+        entry_flow += distribution[inactive_state] * model.ccp[inactive_state]
+        exit_flow += distribution[active_state] * (1.0 - model.ccp[active_state])
+        entry_expenditure += entry_subsidy_rate * parameters.entry[profit_state] *
+            distribution[inactive_state] * model.ccp[inactive_state]
+        for previous_action in 0:1
+            state = state_index(
+                previous_action = previous_action,
+                profit_state = profit_state,
+            )
+            marginal_expenditure +=
+                marginal_subsidy_rate * parameters.running[profit_state] *
+                distribution[state] * model.ccp[state]
+        end
+    end
+
+    return (
+        ccp = model.ccp,
+        distribution = distribution,
+        active_share = active_share,
+        entry_flow = entry_flow,
+        exit_flow = exit_flow,
+        entry_expenditure = entry_expenditure,
+        marginal_expenditure = marginal_expenditure,
+        total_expenditure = entry_expenditure + marginal_expenditure,
+        bellman_residual = model.solution.residual,
+        stationarity_error = stationary.stationarity_error,
+    )
+end
+
+baseline_stationary = stationary_distribution(ccps = estimated_ccps)
+estimated_baseline_active_share = dot(
+    baseline_stationary.distribution,
+    estimated_ccps,
+)
+```
+
+#### Estimated-set grid
+
+- The payoff set is two-dimensional, so the calculation covers its interior, vertices, and edges.
+- Increasing the grid resolution checks the numerical bounds.
+
+```{julia}
+#| label: counterfactual-identified-grid
+
+function identified_scrap_grid(;
+    polygon,
+    resolution,
+    tolerance = 1e-9,
+)
+    vertices = polygon.vertices
+    low_grid = range(
+        minimum(vertices[:, 1]),
+        maximum(vertices[:, 1]);
+        length = resolution,
+    )
+    high_grid = range(
+        minimum(vertices[:, 2]),
+        maximum(vertices[:, 2]);
+        length = resolution,
+    )
+    rows = NamedTuple[]
+    for scrap_low in low_grid, scrap_high in high_grid
+        scrap = [scrap_low, scrap_high]
+        if all(polygon.constraints.matrix * scrap .<=
+               polygon.constraints.bound .+ tolerance)
+            push!(rows, (scrap_low = scrap_low, scrap_high = scrap_high))
+        end
+    end
+    edge_grid = range(0.0, 1.0; length = resolution)
+    vertex_count = size(vertices, 1)
+    for vertex in 1:vertex_count
+        next_vertex = vertex == vertex_count ? 1 : vertex + 1
+        for weight in edge_grid
+            point = (1.0 - weight) .* vertices[vertex, :] .+
+                    weight .* vertices[next_vertex, :]
+            push!(rows, (scrap_low = point[1], scrap_high = point[2]))
+        end
+    end
+    grid = unique(DataFrame(rows))
+    grid.rounded_low = round.(grid.scrap_low; digits = 10)
+    grid.rounded_high = round.(grid.scrap_high; digits = 10)
+    unique!(grid, [:rounded_low, :rounded_high])
+    select!(grid, Not([:rounded_low, :rounded_high]))
+    return grid
+end
+
+function parameter_grid(; resolution)
+    scrap_grid = identified_scrap_grid(
+        polygon = estimated_polygon,
+        resolution = resolution,
+    )
+    return [
+        parameters_from_scrap(
+            scrap = [row.scrap_low, row.scrap_high],
+            ccps = estimated_ccps,
+            transition = estimated_transition,
+        )
+        for row in eachrow(scrap_grid)
+    ]
+end
+
+identified_parameters = parameter_grid(
+    resolution = IDENTIFIED_GRID_RESOLUTION,
+)
+
+DataFrame(
+    identified_parameter_points = [length(identified_parameters)],
+    policy_pairs = [length(POLICY_GRID)^2],
+)
+```
+
+### Entry Cost Subsidy
+
+- Set $\tau_M=0$ and vary $\tau_E$ to isolate how cheaper entry changes entry, exit, and long-run activity.
+- Use conditional transition probabilities because stationary entry and exit flows are equal by construction.
+
+```{julia}
+#| label: single-policy-functions
+
+function conditional_transition_rates(; outcome)
+    inactive_mass = sum(outcome.distribution[1:2])
+    active_mass = sum(outcome.distribution[3:4])
+    return (
+        entry_probability = outcome.entry_flow / inactive_mass,
+        exit_probability = outcome.exit_flow / active_mass,
+        continuation_probability = 1.0 - outcome.exit_flow / active_mass,
+    )
+end
+
+baseline_entry_flow = sum(
+    baseline_stationary.distribution[1:2] .* estimated_ccps[1:2]
+)
+baseline_exit_flow = sum(
+    baseline_stationary.distribution[3:4] .* (1.0 .- estimated_ccps[3:4])
+)
+baseline_transition_rates = (
+    entry_probability = baseline_entry_flow /
+        sum(baseline_stationary.distribution[1:2]),
+    exit_probability = baseline_exit_flow /
+        sum(baseline_stationary.distribution[3:4]),
+    continuation_probability = 1.0 - baseline_exit_flow /
+        sum(baseline_stationary.distribution[3:4]),
+)
+
+function single_policy_bounds(;
+    parameters_grid,
+    policy_grid,
+    varied_policy,
+)
+    rows = NamedTuple[]
+    for subsidy_rate in policy_grid
+        entry_changes = Float64[]
+        exit_changes = Float64[]
+        continuation_changes = Float64[]
+        active_share_changes = Float64[]
+        for parameters in parameters_grid
+            entry_subsidy_rate = varied_policy == :entry ? subsidy_rate : 0.0
+            marginal_subsidy_rate = varied_policy == :marginal ? subsidy_rate : 0.0
+            outcome = counterfactual_outcome(
+                parameters = parameters,
+                entry_subsidy_rate = entry_subsidy_rate,
+                marginal_subsidy_rate = marginal_subsidy_rate,
+            )
+            rates = conditional_transition_rates(outcome = outcome)
+            push!(
+                entry_changes,
+                100.0 * (rates.entry_probability -
+                    baseline_transition_rates.entry_probability),
+            )
+            push!(
+                exit_changes,
+                100.0 * (rates.exit_probability -
+                    baseline_transition_rates.exit_probability),
+            )
+            push!(
+                continuation_changes,
+                100.0 * (rates.continuation_probability -
+                    baseline_transition_rates.continuation_probability),
+            )
+            push!(
+                active_share_changes,
+                100.0 * (outcome.active_share -
+                    estimated_baseline_active_share) /
+                    estimated_baseline_active_share,
+            )
+        end
+        push!(rows, (
+            subsidy_rate = subsidy_rate,
+            lower_entry_change_pp = minimum(entry_changes),
+            upper_entry_change_pp = maximum(entry_changes),
+            lower_exit_change_pp = minimum(exit_changes),
+            upper_exit_change_pp = maximum(exit_changes),
+            lower_continuation_change_pp = minimum(continuation_changes),
+            upper_continuation_change_pp = maximum(continuation_changes),
+            lower_active_change_percent = minimum(active_share_changes),
+            upper_active_change_percent = maximum(active_share_changes),
+        ))
+    end
+    return DataFrame(rows)
+end
+
+function selected_policy_rows(; results)
+    selected_rates = [0.0, 0.25, 0.5]
+    rows = [
+        any(isapprox.(rate, selected_rates; atol = 1e-10))
+        for rate in results.subsidy_rate
+    ]
+    return results[rows, :]
+end
+
+function clean_policy_values(; values)
+    return [
+        abs(value) < 1e-10 ? 0.0 : round(value; digits = 3)
+        for value in values
+    ]
+end
+
+function single_policy_figure(;
+    results,
+    columns,
+    titles,
+    ylabels,
+    xlabel,
+    color,
+)
+    panels = Any[]
+    for index in eachindex(columns)
+        lower_column, upper_column = columns[index]
+        panel = plot(
+            results.subsidy_rate,
+            results[!, lower_column];
+            fillrange = results[!, upper_column],
+            fillalpha = 0.18,
+            fillcolor = color,
+            color = color,
+            linewidth = 2,
+            label = false,
+            xlabel = xlabel,
+            ylabel = ylabels[index],
+            title = titles[index],
+            legend = false,
+        )
+        plot!(
+            panel,
+            results.subsidy_rate,
+            results[!, upper_column];
+            color = color,
+            linestyle = :dash,
+            linewidth = 2,
+            label = false,
+        )
+        hline!(
+            panel,
+            [0.0];
+            color = :gray,
+            linewidth = 1,
+            label = false,
+        )
+        push!(panels, panel)
+    end
+    return plot(panels...; layout = (1, 3))
+end
+
+entry_subsidy_bounds = single_policy_bounds(
+    parameters_grid = identified_parameters,
+    policy_grid = POLICY_GRID,
+    varied_policy = :entry,
+)
+
+@assert maximum(abs.(Matrix(entry_subsidy_bounds[1:1, 2:end]))) < 1e-8
+
+selected_entry_results = selected_policy_rows(results = entry_subsidy_bounds)
+entry_policy_table = DataFrame(
+    subsidy_rate = selected_entry_results.subsidy_rate,
+    entry_lower_pp = clean_policy_values(
+        values = selected_entry_results.lower_entry_change_pp,
+    ),
+    entry_upper_pp = clean_policy_values(
+        values = selected_entry_results.upper_entry_change_pp,
+    ),
+    exit_lower_pp = clean_policy_values(
+        values = selected_entry_results.lower_exit_change_pp,
+    ),
+    exit_upper_pp = clean_policy_values(
+        values = selected_entry_results.upper_exit_change_pp,
+    ),
+    active_lower_percent = clean_policy_values(
+        values = selected_entry_results.lower_active_change_percent,
+    ),
+    active_upper_percent = clean_policy_values(
+        values = selected_entry_results.upper_active_change_percent,
+    ),
+)
+
+entry_policy_table
+```
+
+```{julia}
+#| label: fig-entry-cost-subsidy
+#| fig-cap: "Entry-cost subsidy effects over the estimated payoff set. Solid and dashed lines are lower and upper bounds; shading is the identified interval. Transition effects are percentage-point changes from baseline."
+#| fig-width: 12
+#| fig-height: 4.3
+
+single_policy_figure(
+    results = entry_subsidy_bounds,
+    columns = [
+        (:lower_entry_change_pp, :upper_entry_change_pp),
+        (:lower_exit_change_pp, :upper_exit_change_pp),
+        (:lower_active_change_percent, :upper_active_change_percent),
+    ],
+    titles = ["Entry", "Exit", "Long-run activity"],
+    ylabels = ["Change (pp)", "Change (pp)", "Change in μ₁ (%)"],
+    xlabel = "Entry subsidy rate τₑ",
+    color = :navy,
+)
+```
+
+- At $\tau_E=0.5$, conditional entry changes by $[-3.12,17.18]$ percentage points and exit by $[0,53.04]$ percentage points.
+- The active-share effect is $[-31.60,0]$ percent: subsidized re-entry can make the exit response dominate.
+
+### Marginal Cost Subsidy
+
+- Set $\tau_E=0$ and vary $\tau_M$ to isolate how lower operating costs change entry, continuation, and long-run activity.
+- Report the continuation probability rather than the exit probability to show the direct operating-margin response.
+
+```{julia}
+#| label: marginal-cost-subsidy-results
+
+marginal_subsidy_bounds = single_policy_bounds(
+    parameters_grid = identified_parameters,
+    policy_grid = POLICY_GRID,
+    varied_policy = :marginal,
+)
+
+@assert maximum(abs.(Matrix(marginal_subsidy_bounds[1:1, 2:end]))) < 1e-8
+
+selected_marginal_results = selected_policy_rows(
+    results = marginal_subsidy_bounds,
+)
+marginal_policy_table = DataFrame(
+    subsidy_rate = selected_marginal_results.subsidy_rate,
+    entry_lower_pp = clean_policy_values(
+        values = selected_marginal_results.lower_entry_change_pp,
+    ),
+    entry_upper_pp = clean_policy_values(
+        values = selected_marginal_results.upper_entry_change_pp,
+    ),
+    continuation_lower_pp = clean_policy_values(
+        values = selected_marginal_results.lower_continuation_change_pp,
+    ),
+    continuation_upper_pp = clean_policy_values(
+        values = selected_marginal_results.upper_continuation_change_pp,
+    ),
+    active_lower_percent = clean_policy_values(
+        values = selected_marginal_results.lower_active_change_percent,
+    ),
+    active_upper_percent = clean_policy_values(
+        values = selected_marginal_results.upper_active_change_percent,
+    ),
+)
+
+marginal_policy_table
+```
+
+```{julia}
+#| label: fig-marginal-cost-subsidy
+#| fig-cap: "Marginal-cost subsidy effects over the estimated payoff set. Solid and dashed lines are lower and upper bounds; shading is the identified interval. Transition effects are percentage-point changes from baseline."
+#| fig-width: 12
+#| fig-height: 4.3
+
+single_policy_figure(
+    results = marginal_subsidy_bounds,
+    columns = [
+        (:lower_entry_change_pp, :upper_entry_change_pp),
+        (
+            :lower_continuation_change_pp,
+            :upper_continuation_change_pp,
+        ),
+        (:lower_active_change_percent, :upper_active_change_percent),
+    ],
+    titles = ["Entry", "Continuation", "Long-run activity"],
+    ylabels = ["Change (pp)", "Change (pp)", "Change in μ₁ (%)"],
+    xlabel = "Marginal subsidy rate τₘ",
+    color = :darkorange,
+)
+```
+
+- At $\tau_M=0.5$, continuation changes by $[0,4.79]$ percentage points and the active share by $[0,6.50]$ percent.
+- The marginal-cost subsidy therefore weakly raises long-run activity over the estimated payoff set.
+
+### Mixed Policy Design
+
+#### Identified policy surfaces
+
+- For each policy pair, the smallest and largest values over the estimated payoff set form numerical counterfactual bounds.
+- A cost-effectiveness cell is valid only when every admissible model exceeds the expenditure threshold.
+
+```{julia}
+#| label: counterfactual-policy-grid
+
+function evaluate_policy_pair(;
+    parameters_grid,
+    entry_subsidy_rate,
+    marginal_subsidy_rate,
+)
+    percentage_changes = Float64[]
+    expenditures = Float64[]
+    cost_effectiveness = Float64[]
+    maximum_bellman_residual = 0.0
+    maximum_stationarity_error = 0.0
+    maximum_flow_error = 0.0
+
+    for parameters in parameters_grid
+        outcome = counterfactual_outcome(
+            parameters = parameters,
+            entry_subsidy_rate = entry_subsidy_rate,
+            marginal_subsidy_rate = marginal_subsidy_rate,
+        )
+        percentage_change = 100.0 *
+            (outcome.active_share - estimated_baseline_active_share) /
+            estimated_baseline_active_share
+        push!(percentage_changes, percentage_change)
+        push!(expenditures, outcome.total_expenditure)
+        if outcome.total_expenditure > 1e-12
+            push!(
+                cost_effectiveness,
+                percentage_change / outcome.total_expenditure,
+            )
+        end
+        maximum_bellman_residual = max(
+            maximum_bellman_residual,
+            outcome.bellman_residual,
+        )
+        maximum_stationarity_error = max(
+            maximum_stationarity_error,
+            outcome.stationarity_error,
+        )
+        maximum_flow_error = max(
+            maximum_flow_error,
+            abs(outcome.entry_flow - outcome.exit_flow),
+        )
+    end
+
+    positive_expenditure_for_all =
+        length(cost_effectiveness) == length(parameters_grid)
+    return (
+        lower_percentage_change = minimum(percentage_changes),
+        upper_percentage_change = maximum(percentage_changes),
+        lower_expenditure = minimum(expenditures),
+        upper_expenditure = maximum(expenditures),
+        lower_cost_effectiveness = positive_expenditure_for_all ?
+            minimum(cost_effectiveness) : NaN,
+        upper_cost_effectiveness = positive_expenditure_for_all ?
+            maximum(cost_effectiveness) : NaN,
+        maximum_bellman_residual = maximum_bellman_residual,
+        maximum_stationarity_error = maximum_stationarity_error,
+        maximum_flow_error = maximum_flow_error,
+    )
+end
+
+function counterfactual_policy_grid(; parameters_grid, policy_grid)
+    rows = NamedTuple[]
+    for entry_subsidy_rate in policy_grid
+        for marginal_subsidy_rate in policy_grid
+            bounds = evaluate_policy_pair(
+                parameters_grid = parameters_grid,
+                entry_subsidy_rate = entry_subsidy_rate,
+                marginal_subsidy_rate = marginal_subsidy_rate,
+            )
+            robustly_valid =
+                bounds.lower_expenditure >= MINIMUM_EXPENDITURE &&
+                isfinite(bounds.lower_cost_effectiveness)
+            push!(rows, (
+                entry_subsidy_rate = entry_subsidy_rate,
+                marginal_subsidy_rate = marginal_subsidy_rate,
+                lower_percentage_change = bounds.lower_percentage_change,
+                upper_percentage_change = bounds.upper_percentage_change,
+                lower_expenditure = bounds.lower_expenditure,
+                upper_expenditure = bounds.upper_expenditure,
+                lower_cost_effectiveness = robustly_valid ?
+                    bounds.lower_cost_effectiveness : NaN,
+                upper_cost_effectiveness = robustly_valid ?
+                    bounds.upper_cost_effectiveness : NaN,
+                cost_effectiveness_width = robustly_valid ?
+                    bounds.upper_cost_effectiveness -
+                    bounds.lower_cost_effectiveness : NaN,
+                maximum_bellman_residual = bounds.maximum_bellman_residual,
+                maximum_stationarity_error = bounds.maximum_stationarity_error,
+                maximum_flow_error = bounds.maximum_flow_error,
+            ))
+        end
+    end
+    return DataFrame(rows)
+end
+
+counterfactual_bounds = counterfactual_policy_grid(
+    parameters_grid = identified_parameters,
+    policy_grid = POLICY_GRID,
+)
+
+valid_policy_rows = findall(
+    isfinite.(counterfactual_bounds.lower_cost_effectiveness)
+)
+isempty(valid_policy_rows) && error("No policy pair satisfies the expenditure threshold.")
+best_lower_bound = maximum(
+    counterfactual_bounds.lower_cost_effectiveness[valid_policy_rows]
+)
+robust_rows = valid_policy_rows[
+    counterfactual_bounds.lower_cost_effectiveness[valid_policy_rows] .>=
+    best_lower_bound - 1e-10
+]
+robust_policy = counterfactual_bounds[first(robust_rows), :]
+
+first(counterfactual_bounds, 6)
+```
+
+```{julia}
+#| label: fig-active-share-surface
+#| fig-cap: "Active-share bounds at five marginal-cost subsidy rates. Solid and dashed lines are the lower and upper bounds; shading is the numerical counterfactual interval."
+#| fig-width: 11
+#| fig-height: 7
+
+const DISPLAY_MARGINAL_SUBSIDY_RATES = [0.0, 0.125, 0.25, 0.375, 0.5]
+const DISPLAY_SLICE_COLORS = [:navy, :royalblue3, :darkorange, :firebrick3, :black]
+const DISPLAY_SLICE_STYLES = [:solid, :dash, :dot, :dashdot, :solid]
+
+function marginal_policy_slice(; results, marginal_subsidy_rate)
+    rows = isapprox.(
+        results.marginal_subsidy_rate,
+        marginal_subsidy_rate;
+        atol = 1e-10,
+    )
+    return sort(results[rows, :], :entry_subsidy_rate)
+end
+
+function interval_slice_figure(;
+    results,
+    lower_column,
+    upper_column,
+    ylabel,
+    zero_reference = false,
+)
+    panels = Any[]
+    for (index, marginal_rate) in enumerate(DISPLAY_MARGINAL_SUBSIDY_RATES)
+        slice = marginal_policy_slice(
+            results = results,
+            marginal_subsidy_rate = marginal_rate,
+        )
+        panel = plot(
+            slice.entry_subsidy_rate,
+            slice[!, lower_column];
+            fillrange = slice[!, upper_column],
+            fillalpha = 0.18,
+            fillcolor = DISPLAY_SLICE_COLORS[index],
+            color = DISPLAY_SLICE_COLORS[index],
+            linewidth = 2,
+            label = false,
+            xlabel = index >= 4 ? "Entry subsidy rate τₑ" : "",
+            ylabel = index in (1, 4) ? ylabel : "",
+            title = "τₘ = $(marginal_rate)",
+            legend = false,
+        )
+        plot!(
+            panel,
+            slice.entry_subsidy_rate,
+            slice[!, upper_column];
+            color = DISPLAY_SLICE_COLORS[index],
+            linestyle = :dash,
+            linewidth = 2,
+            label = false,
+        )
+        zero_reference && hline!(
+            panel,
+            [0.0];
+            color = :gray,
+            linewidth = 1,
+            label = false,
+        )
+        push!(panels, panel)
+    end
+    return plot(panels...; layout = (2, 3), link = :y)
+end
+
+interval_slice_figure(
+    results = counterfactual_bounds,
+    lower_column = :lower_percentage_change,
+    upper_column = :upper_percentage_change,
+    ylabel = "Change in μ₁ (%)",
+    zero_reference = true,
+)
+```
+
+```{julia}
+#| label: fig-expenditure-surface
+#| fig-cap: "Expenditure bounds at five marginal-cost subsidy rates. Solid and dashed lines are the lower and upper bounds; shading is the numerical counterfactual interval."
+#| fig-width: 11
+#| fig-height: 7
+
+interval_slice_figure(
+    results = counterfactual_bounds,
+    lower_column = :lower_expenditure,
+    upper_column = :upper_expenditure,
+    ylabel = "Expenditure",
+)
+```
+
+```{julia}
+#| label: fig-cost-effectiveness-surface
+#| fig-cap: "Cost-effectiveness bounds at five marginal-cost subsidy rates. Each color identifies one rate; solid and dashed lines are lower and upper bounds. Gaps fail the expenditure threshold; the star marks the maximin grid choice."
+#| fig-width: 10
+#| fig-height: 5.2
+
+cost_effectiveness_plot = plot(
+    xlabel = "Entry subsidy rate τₑ",
+    ylabel = "Rμ / G",
+    title = "Cost-effectiveness bounds",
+    legend = :outerright,
+    xlims = (-0.01, 0.52),
+)
+for (index, marginal_rate) in enumerate(DISPLAY_MARGINAL_SUBSIDY_RATES)
+    slice = marginal_policy_slice(
+        results = counterfactual_bounds,
+        marginal_subsidy_rate = marginal_rate,
+    )
+    plot!(
+        cost_effectiveness_plot,
+        slice.entry_subsidy_rate,
+        slice.lower_cost_effectiveness;
+        color = DISPLAY_SLICE_COLORS[index],
+        linestyle = :solid,
+        linewidth = 2,
+        label = "τₘ = $(marginal_rate)",
+    )
+    plot!(
+        cost_effectiveness_plot,
+        slice.entry_subsidy_rate,
+        slice.upper_cost_effectiveness;
+        color = DISPLAY_SLICE_COLORS[index],
+        linestyle = :dash,
+        linewidth = 2,
+        label = false,
+    )
+end
+finite_cost_effectiveness = filter(
+    isfinite,
+    vcat(
+        counterfactual_bounds.lower_cost_effectiveness,
+        counterfactual_bounds.upper_cost_effectiveness,
+    ),
+)
+cost_effectiveness_span =
+    maximum(finite_cost_effectiveness) - minimum(finite_cost_effectiveness)
+ylims!(
+    cost_effectiveness_plot,
+    minimum(finite_cost_effectiveness) - 0.03 * cost_effectiveness_span,
+    maximum(finite_cost_effectiveness) + 0.08 * cost_effectiveness_span,
+)
+hline!(
+    cost_effectiveness_plot,
+    [0.0];
+    color = :gray,
+    linewidth = 1,
+    label = false,
+)
+scatter!(
+    cost_effectiveness_plot,
+    [robust_policy.entry_subsidy_rate],
+    [robust_policy.lower_cost_effectiveness];
+    color = :black,
+    marker = :star5,
+    markersize = 8,
+    label = "Maximin lower bound",
+)
+
+cost_effectiveness_plot
+```
+
+#### Robust policy
+
+- The robust grid choice maximizes the lower cost-effectiveness bound among cells satisfying $G\geq10^{-4}$ for every admissible model.
+- The zero-subsidy pair is excluded automatically because its expenditure is zero.
+
+```{julia}
+#| label: robust-policy
+
+robust_policy_table = DataFrame(
+    entry_subsidy_rate = [robust_policy.entry_subsidy_rate],
+    marginal_subsidy_rate = [robust_policy.marginal_subsidy_rate],
+    lower_active_change_percent = [robust_policy.lower_percentage_change],
+    upper_active_change_percent = [robust_policy.upper_percentage_change],
+    lower_expenditure = [robust_policy.lower_expenditure],
+    upper_expenditure = [robust_policy.upper_expenditure],
+    lower_cost_effectiveness = [robust_policy.lower_cost_effectiveness],
+    upper_cost_effectiveness = [robust_policy.upper_cost_effectiveness],
+)
+
+robust_policy_table
+```
+
+- The maximin grid choice is the corner $(\tau_E,\tau_M)=(0.5,0.5)$.
+- Its lower active-share change is $-31.6$ percent, so no threshold-valid grid cell guarantees an increase.
+
+#### Validation
+
+- The checks verify the dynamic solution, stationary distribution, entry-exit balance, baseline invariance, and grid sensitivity.
+
+```{julia}
+#| label: counterfactual-validation
+
+baseline_errors = Float64[]
+for parameters in identified_parameters
+    baseline_outcome = counterfactual_outcome(
+        parameters = parameters,
+        entry_subsidy_rate = 0.0,
+        marginal_subsidy_rate = 0.0,
+    )
+    push!(
+        baseline_errors,
+        abs(baseline_outcome.active_share - estimated_baseline_active_share),
+    )
+end
+
+resolution_rows = NamedTuple[]
+for resolution in [15, 21, 31]
+    resolution_parameters = parameter_grid(resolution = resolution)
+    bounds = evaluate_policy_pair(
+        parameters_grid = resolution_parameters,
+        entry_subsidy_rate = robust_policy.entry_subsidy_rate,
+        marginal_subsidy_rate = robust_policy.marginal_subsidy_rate,
+    )
+    push!(resolution_rows, (
+        resolution = resolution,
+        parameter_points = length(resolution_parameters),
+        lower_cost_effectiveness = bounds.lower_cost_effectiveness,
+        upper_cost_effectiveness = bounds.upper_cost_effectiveness,
+    ))
+end
+resolution_sensitivity = DataFrame(resolution_rows)
+
+threshold_rows = NamedTuple[]
+for threshold in [1e-5, 1e-4, 1e-3]
+    candidates = findall(
+        (counterfactual_bounds.lower_expenditure .>= threshold) .&
+        isfinite.(counterfactual_bounds.lower_cost_effectiveness)
+    )
+    if isempty(candidates)
+        push!(threshold_rows, (
+            minimum_expenditure = threshold,
+            entry_subsidy_rate = missing,
+            marginal_subsidy_rate = missing,
+            lower_cost_effectiveness = missing,
+        ))
+    else
+        candidate_values =
+            counterfactual_bounds.lower_cost_effectiveness[candidates]
+        selected = candidates[argmax(candidate_values)]
+        push!(threshold_rows, (
+            minimum_expenditure = threshold,
+            entry_subsidy_rate =
+                counterfactual_bounds.entry_subsidy_rate[selected],
+            marginal_subsidy_rate =
+                counterfactual_bounds.marginal_subsidy_rate[selected],
+            lower_cost_effectiveness =
+                counterfactual_bounds.lower_cost_effectiveness[selected],
+        ))
+    end
+end
+threshold_sensitivity = DataFrame(threshold_rows)
+
+counterfactual_validation = DataFrame(
+    check = [
+        "Largest baseline active-share error",
+        "Largest Bellman residual",
+        "Largest stationary-distribution error",
+        "Largest stationary entry-exit flow error",
+    ],
+    value = [
+        maximum(baseline_errors),
+        maximum(counterfactual_bounds.maximum_bellman_residual),
+        maximum(counterfactual_bounds.maximum_stationarity_error),
+        maximum(counterfactual_bounds.maximum_flow_error),
+    ],
+)
+
+@assert maximum(counterfactual_validation.value) < 1e-8
+
+counterfactual_validation
+```
+
+```{julia}
+#| label: counterfactual-sensitivity-tables
+
+display(resolution_sensitivity)
+display(threshold_sensitivity)
+```
+
+```{julia}
+#| label: export-document-assets
+#| include: false
+
+const EXPORT_ROOT = "assets"
+const EXPORT_FIGURES = joinpath(EXPORT_ROOT, "figures")
+const EXPORT_TABLES = joinpath(EXPORT_ROOT, "tables")
+
+mkpath(EXPORT_FIGURES)
+mkpath(EXPORT_TABLES)
+
+estimated_set_export_plot = plot(
+    population_panel,
+    estimated_panel;
+    layout = (1, 2),
+)
+entry_subsidy_export_plot = single_policy_figure(
+    results = entry_subsidy_bounds,
+    columns = [
+        (:lower_entry_change_pp, :upper_entry_change_pp),
+        (:lower_exit_change_pp, :upper_exit_change_pp),
+        (:lower_active_change_percent, :upper_active_change_percent),
+    ],
+    titles = ["Entry", "Exit", "Long-run activity"],
+    ylabels = ["Change (pp)", "Change (pp)", "Change in μ₁ (%)"],
+    xlabel = "Entry subsidy rate τₑ",
+    color = :navy,
+)
+marginal_subsidy_export_plot = single_policy_figure(
+    results = marginal_subsidy_bounds,
+    columns = [
+        (:lower_entry_change_pp, :upper_entry_change_pp),
+        (
+            :lower_continuation_change_pp,
+            :upper_continuation_change_pp,
+        ),
+        (:lower_active_change_percent, :upper_active_change_percent),
+    ],
+    titles = ["Entry", "Continuation", "Long-run activity"],
+    ylabels = ["Change (pp)", "Change (pp)", "Change in μ₁ (%)"],
+    xlabel = "Marginal subsidy rate τₘ",
+    color = :darkorange,
+)
+plot!(marginal_subsidy_export_plot; size = (840, 480))
+active_share_export_plot = interval_slice_figure(
+    results = counterfactual_bounds,
+    lower_column = :lower_percentage_change,
+    upper_column = :upper_percentage_change,
+    ylabel = "Change in μ₁ (%)",
+    zero_reference = true,
+)
+expenditure_export_plot = interval_slice_figure(
+    results = counterfactual_bounds,
+    lower_column = :lower_expenditure,
+    upper_column = :upper_expenditure,
+    ylabel = "Expenditure",
+)
+
+export_plots = [
+    ("population_identified_set", population_set_plot),
+    ("estimated_identified_set", estimated_set_export_plot),
+    ("entry_cost_subsidy", entry_subsidy_export_plot),
+    ("marginal_cost_subsidy", marginal_subsidy_export_plot),
+    ("mixed_active_share", active_share_export_plot),
+    ("mixed_expenditure", expenditure_export_plot),
+    ("mixed_cost_effectiveness", cost_effectiveness_plot),
+]
+
+for (name, figure) in export_plots
+    savefig(figure, joinpath(EXPORT_FIGURES, name * ".pdf"))
+    savefig(figure, joinpath(EXPORT_FIGURES, name * ".svg"))
+end
+
+function write_latex_table(;
+    path,
+    column_specification,
+    headers,
+    rows,
+)
+    open(path, "w") do output
+        println(output, raw"\begin{tabular}{" * column_specification * "}")
+        println(output, raw"\toprule")
+        println(output, join(headers, " & ") * " \\\\")
+        println(output, raw"\midrule")
+        for row in rows
+            println(output, join(row, " & ") * " \\\\")
+        end
+        println(output, raw"\bottomrule")
+        println(output, raw"\end{tabular}")
+    end
+end
+
+function write_markdown_table(; path, headers, rows)
+    open(path, "w") do output
+        println(output, "| " * join(headers, " | ") * " |")
+        println(output, "|" * join(fill("---", length(headers)), "|") * "|")
+        for row in rows
+            println(output, "| " * join(row, " | ") * " |")
+        end
+    end
+end
+
+summary_rows = [
+    [
+        string(row.previous_action),
+        row.profit_state == 1 ? "Low" : "High",
+        string(row.observations),
+        string(row.active_choices),
+        string(round(row.active_share; digits = 3)),
+    ]
+    for row in eachrow(summary_statistics)
+]
+ccp_rows = [
+    [
+        string(row.previous_action),
+        row.profit_state == 1 ? "Low" : "High",
+        string(round(row.estimated_ccp; digits = 3)),
+        string(round(row.population_ccp; digits = 3)),
+    ]
+    for row in eachrow(ccp_comparison)
+]
+
+write_latex_table(
+    path = joinpath(EXPORT_TABLES, "summary_statistics.tex"),
+    column_specification = "ccrrr",
+    headers = [
+        raw"$k_t$",
+        "Profit state",
+        "Observations",
+        "Active choices",
+        "Active share",
+    ],
+    rows = summary_rows,
+)
+write_latex_table(
+    path = joinpath(EXPORT_TABLES, "estimated_ccps.tex"),
+    column_specification = "ccrr",
+    headers = [
+        raw"$k_t$",
+        "Profit state",
+        raw"$\widehat p_{kw}$",
+        raw"$p_{kw}$",
+    ],
+    rows = ccp_rows,
+)
+write_markdown_table(
+    path = joinpath(EXPORT_TABLES, "summary_statistics.qmd"),
+    headers = [
+        raw"$k_t$",
+        "Profit state",
+        "Observations",
+        "Active choices",
+        "Active share",
+    ],
+    rows = summary_rows,
+)
+write_markdown_table(
+    path = joinpath(EXPORT_TABLES, "estimated_ccps.qmd"),
+    headers = [
+        raw"$k_t$",
+        "Profit state",
+        raw"$\widehat p_{kw}$",
+        raw"$p_{kw}$",
+    ],
+    rows = ccp_rows,
+)
+
+sample_objective_value = minimum_distance_objective(
+    parameters = TRUE_PARAMETERS,
+    ccps = estimated_ccps,
+    transition = estimated_transition,
+)
+open(joinpath(EXPORT_TABLES, "sample_objective.tex"), "w") do output
+    println(
+        output,
+        raw"\newcommand{\SampleObjectiveValue}{" *
+        string(round(sample_objective_value; sigdigits = 4)) * "}",
+    )
+end
+
+slide_asset_root = joinpath("slides", "assets")
+slide_figure_root = joinpath(slide_asset_root, "figures")
+slide_table_root = joinpath(slide_asset_root, "tables")
+mkpath(slide_figure_root)
+mkpath(slide_table_root)
+
+for file in readdir(EXPORT_FIGURES)
+    endswith(file, ".svg") || continue
+    cp(
+        joinpath(EXPORT_FIGURES, file),
+        joinpath(slide_figure_root, file);
+        force = true,
+    )
+end
+for file in readdir(EXPORT_TABLES)
+    endswith(file, ".qmd") || continue
+    cp(
+        joinpath(EXPORT_TABLES, file),
+        joinpath(slide_table_root, file);
+        force = true,
+    )
+end
+```
